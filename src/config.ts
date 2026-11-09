@@ -27,7 +27,7 @@ export const PREVIEW_CONFIG: NetworkConfig = {
   node: 'https://rpc.preview.midnight.network',
   nodeWS: 'wss://rpc.preview.midnight.network',
   proofServer: process.env['MIDNIGHT_PROOF_SERVER'] ?? 'http://127.0.0.1:6300',
-  faucet: 'https://midnight-tmnight-preview.nethermind.dev/',
+  faucet: 'https://faucet.preview.midnight.network/',
 };
 
 export const PREPROD_CONFIG: NetworkConfig = {

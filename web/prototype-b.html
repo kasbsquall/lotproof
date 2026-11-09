@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lotproof</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css">
+<style>
+:root{
+  --fondo: oklch(98% .004 230);
+  --hoja: oklch(99.4% .003 230);
+  --tinta: oklch(24% .02 250);
+  --tinta-2: oklch(45% .02 250);
+  --tinta-3: oklch(58% .015 250);
+  --banda: oklch(92% .04 195);
+  --banda-2: oklch(95.5% .025 195);
+  --dentro: oklch(52% .11 195);
+  --dentro-osc: oklch(42% .1 195);
+  --fuera: oklch(58% .2 28);
+  --fuera-suave: oklch(95% .03 28);
+  --pend: oklch(62% .12 75);
+  --pend-suave: oklch(95.5% .04 85);
+  --linea: oklch(88% .01 250);
+  --linea-2: oklch(93% .008 250);
+  --rail: oklch(95.5% .008 230);
+  --r: 6px;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --sans: "Commissioner", sans-serif;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:400 14px/1.45 var(--sans);font-variant-numeric:tabular-nums lining-nums;-webkit-font-smoothing:antialiased}
+::selection{background:var(--banda);color:var(--tinta)}
+a{color:var(--dentro-osc);text-underline-offset:3px;text-decoration-thickness:1px}
+:focus-visible{outline:2px solid var(--dentro);outline-offset:2px;border-radius:4px}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums lining-nums slashed-zero}
+.mono{font-family:var(--mono);font-size:12.5px;letter-spacing:0;font-variant-numeric:tabular-nums slashed-zero}
+i.ph-light{font-size:16px;line-height:1;vertical-align:-2px}
+*{scrollbar-color:var(--linea) transparent;scrollbar-width:thin}
+
+/* shell */
+.app{display:grid;grid-template-columns:272px 1fr;background:linear-gradient(to right,var(--rail) 272px,var(--linea) 272px,var(--linea) 273px,transparent 273px);grid-template-rows:52px 1fr;min-height:100vh}
+.top{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 20px;border-bottom:1px solid var(--linea);background:var(--hoja);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;letter-spacing:-.01em}
+.brand svg{display:block}
+.top .sep{width:1px;height:20px;background:var(--linea)}
+.ctx{color:var(--tinta-2);font-size:13px;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx b{font-weight:500;color:var(--tinta)}
+.top .spacer{flex:1}
+.net{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--tinta-2);padding:4px 10px;border:1px solid var(--linea);border-radius:999px;white-space:nowrap}
+.net .dot{width:7px;height:7px;border-radius:50%;background:var(--dentro);animation:breathe 3.4s ease-in-out infinite}
+.net.err .dot{background:var(--fuera);animation:none}
+.iconbtn{width:32px;height:32px;display:grid;place-items:center;border:1px solid transparent;background:none;border-radius:var(--r);cursor:pointer;color:var(--tinta-2)}
+.iconbtn:hover{background:var(--rail);color:var(--tinta)}
+.iconbtn i{font-size:18px}
+
+/* index rail */
+.rail{background:var(--rail);border-right:1px solid var(--linea);padding:16px 12px 24px;overflow:auto;position:sticky;top:52px;height:calc(100vh - 52px)}
+.search{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--hoja);border:1px solid var(--linea);border-radius:var(--r);color:var(--tinta-3)}
+.search input{border:0;outline:0;background:none;font:inherit;color:var(--tinta);width:100%}
+.search:focus-within{border-color:var(--dentro)}
+.group{margin-top:22px}
+.group h3{margin:0 8px 6px;font-size:12px;font-weight:500;color:var(--tinta-2);display:flex;justify-content:space-between;letter-spacing:.01em}
+.group h3 span{color:var(--tinta-3);font-weight:400}
+.lot{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 8px;border:0;background:none;border-radius:var(--r);cursor:pointer;color:var(--tinta)}
+.lot:hover{background:color-mix(in oklab,var(--linea) 45%,transparent)}
+.lot[aria-current="true"]{background:var(--hoja);box-shadow:0 1px 2px color-mix(in oklab,var(--tinta) 10%,transparent),0 0 0 1px var(--linea)}
+.lot .nm{font-weight:500;font-size:13.5px}
+.lot .sub{display:block;font-size:12px;color:var(--tinta-3);font-weight:400}
+.lot .ct{font-size:12.5px;color:var(--tinta-2)}
+.lot i{font-size:17px}
+.st-ok{color:var(--dentro)} .st-bad{color:var(--fuera)} .st-pend{color:var(--pend)}
+.st-pend.spin{display:inline-block;animation:rot 9s linear infinite}
+.rail-foot{margin:28px 8px 0;font-size:12px;color:var(--tinta-3);line-height:1.5}
+
+/* main */
+main{padding:28px 40px 72px;min-width:0}
+.sheet{max-width:1080px;margin:0 auto}
+.head{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.head .t{flex:1;min-width:260px}
+.crumb{font-size:12.5px;color:var(--tinta-3);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+h1{margin:6px 0 0;font-size:30px;line-height:1.1;font-weight:650;letter-spacing:-.02em;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;letter-spacing:0;padding:3px 10px 3px 8px;border-radius:999px;line-height:1.5}
+.badge.ok{background:var(--banda-2);color:var(--dentro-osc);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--dentro) 30%,transparent)}
+.badge.bad{background:var(--fuera-suave);color:oklch(46% .17 28);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--fuera) 30%,transparent)}
+.badge.pend{background:var(--pend-suave);color:oklch(46% .1 70);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--pend) 35%,transparent)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:var(--r);border:1px solid var(--linea);background:var(--hoja);cursor:pointer;font-weight:500;font-size:13.5px;white-space:nowrap;transition:transform 120ms var(--ease),background-color 150ms var(--ease)}
+.btn:hover{background:var(--rail)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--tinta);border-color:var(--tinta);color:var(--hoja)}
+.btn.primary:hover{background:oklch(32% .025 250)}
+.btn.danger{color:oklch(46% .17 28)}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn i{font-size:16px}
+
+.summary{margin:26px 0 0;font-size:22px;line-height:1.4;font-weight:400;letter-spacing:-.01em;max-width:62ch;text-wrap:pretty}
+.summary strong{font-weight:600}
+.summary .in{color:var(--dentro-osc)} .summary .out{color:oklch(48% .18 28)}
+.since{margin-top:10px;font-size:13px;color:var(--tinta-3)}
+
+/* facts strip: unequal columns */
+.facts{display:grid;grid-template-columns:1.7fr 1fr 1fr 1.3fr;margin-top:30px;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea)}
+.fact{padding:16px 18px 18px;border-left:1px solid var(--linea-2)}
+.fact:first-child{border-left:0;padding-left:0}
+.fact .k{font-size:12px;color:var(--tinta-2);display:flex;gap:6px;align-items:center}
+.fact .v{margin-top:6px;font-size:15px;font-weight:500}
+.hero-n{font-size:76px;line-height:.9;font-weight:600;letter-spacing:-.03em;display:flex;align-items:baseline;gap:6px;margin-top:8px}
+.hero-n small{font-size:24px;font-weight:500;color:var(--tinta-3);letter-spacing:-.01em}
+.hero-n .u{font-size:14px;color:var(--tinta-2);font-weight:400;letter-spacing:0;margin-left:4px}
+.fact .note{margin-top:6px;font-size:12.5px;color:var(--tinta-3)}
+
+/* chart */
+.chart-wrap{margin-top:44px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sec-h h2{margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--tinta-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:50%;display:inline-block}
+.chart{margin-top:14px;background:var(--hoja);border:1px solid var(--linea);border-radius:var(--r);padding:8px 8px 4px;position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.axis{font:400 11.5px var(--mono);fill:var(--tinta-3)}
+.axis.strong{fill:var(--tinta-2)}
+.lim{stroke:var(--dentro);stroke-width:1.2;fill:none;stroke-dasharray:900;stroke-dashoffset:0}
+.nom{stroke:var(--dentro-osc);stroke-width:1;stroke-dasharray:4 4;opacity:.7}
+.mk{transition:transform 280ms var(--ease),opacity 200ms var(--ease)}
+.mk circle.in{fill:var(--dentro)}
+.mk circle.out{fill:var(--fuera)}
+.mk circle.hollow{fill:var(--hoja);stroke:var(--tinta-3);stroke-width:1.2}
+.mk circle.refused{fill:var(--hoja);stroke:var(--fuera);stroke-width:1.2}
+.mk.hit{cursor:pointer}
+.mk .ring{fill:none;stroke:var(--fuera);stroke-width:1;opacity:0}
+.mk.disclosed .ring{opacity:.6;animation:ring 2.8s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.callout{opacity:0;transition:opacity 220ms var(--ease) 120ms}
+.disclosed .callout{opacity:1}
+.callout rect{fill:var(--tinta)}
+.callout text{font:500 12px var(--mono);fill:var(--hoja)}
+.chart-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 10px 6px;font-size:12px;color:var(--tinta-3);border-top:1px solid var(--linea-2);margin-top:4px}
+.privacy{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:14px;font-size:13px;border:1px solid var(--linea);border-radius:var(--r);background:var(--hoja)}
+.privacy > div{padding:12px 16px;display:flex;gap:10px;align-items:flex-start}
+.privacy > div + div{border-left:1px solid var(--linea)}
+.privacy i{font-size:18px;margin-top:1px}
+.privacy b{font-weight:600;display:block;margin-bottom:2px}
+.privacy p{margin:0;color:var(--tinta-2)}
+
+/* run banner */
+.run{margin-top:22px;border:1px solid var(--linea);border-radius:var(--r);background:var(--hoja);padding:14px 16px;display:none}
+.run.show{display:block;animation:rise 240ms var(--ease) both}
+.run.bad{background:var(--fuera-suave);border-color:color-mix(in oklab,var(--fuera) 35%,var(--linea))}
+.run-h{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.run-h b{font-weight:600}
+.run-h .eta{font-size:12.5px;color:var(--tinta-2)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.steps li{font-size:12.5px;color:var(--tinta-3);display:flex;align-items:center;gap:6px;padding-top:8px;position:relative}
+.steps li::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;border-radius:2px;background:var(--linea-2)}
+.steps li .bar{position:absolute;left:0;right:0;top:0;height:3px;border-radius:2px;background:var(--dentro);transform:scaleX(0);transform-origin:left;transition:transform 260ms var(--ease)}
+.steps li.done .bar,.steps li.now .bar{transform:scaleX(1)}
+.steps li.now .bar{animation:sheen 1.6s ease-in-out infinite}
+.steps li.fail .bar{transform:scaleX(1);background:var(--fuera)}
+.steps li.done,.steps li.now{color:var(--tinta)}
+.steps li.fail{color:oklch(46% .17 28)}
+.steps li.now i{animation:rot 2.6s linear infinite;display:inline-block}
+.run .msg{margin-top:10px;font-size:13px;color:var(--tinta-2)}
+.run .msg code{font-family:var(--mono);font-size:12.5px;color:oklch(42% .17 28);background:color-mix(in oklab,var(--fuera) 8%,transparent);padding:1px 5px;border-radius:4px}
+
+/* table */
+.proofs{margin-top:44px}
+.tbl{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+.tbl th{text-align:left;font-weight:500;font-size:12px;color:var(--tinta-2);padding:8px 12px;border-bottom:1px solid var(--linea);white-space:nowrap}
+.tbl th button{border:0;background:none;padding:0;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font:inherit;color:inherit}
+.tbl td{padding:11px 12px;border-bottom:1px solid var(--linea-2);vertical-align:top}
+.tbl tr:hover td{background:color-mix(in oklab,var(--banda-2) 45%,transparent)}
+.tbl td:first-child,.tbl th:first-child{padding-left:0}
+.tbl .what{font-weight:500;display:flex;gap:8px;align-items:center}
+.tbl .who{font-size:12.5px;color:var(--tinta-3);margin-top:2px;padding-left:24px}
+.tbl .r{text-align:right}
+.tbl a.tx{display:inline-flex;gap:5px;align-items:center}
+.copy{border:0;background:none;cursor:pointer;color:var(--tinta-3);padding:2px;border-radius:4px;vertical-align:-2px}
+.copy:hover{color:var(--tinta)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px}
+.empty-row td{color:var(--tinta-3);font-style:normal}
+.contract{margin-top:14px;font-size:12.5px;color:var(--tinta-3);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* skeleton */
+.sk{position:relative;color:transparent!important;border-radius:4px;background:var(--linea-2);overflow:hidden}
+.sk *{visibility:hidden}
+.sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,color-mix(in oklab,var(--hoja) 70%,transparent),transparent);transform:translateX(-100%);animation:sk 1.1s ease-in-out infinite}
+.loading .hero-n,.loading .summary,.loading .fact .v,.loading .tbl td>*{}
+
+/* disclose dialog */
+dialog{border:1px solid var(--linea);border-radius:var(--r);padding:0;width:min(440px,calc(100vw - 32px));background:var(--hoja);color:var(--tinta);box-shadow:0 18px 40px -12px color-mix(in oklab,var(--tinta) 30%,transparent)}
+dialog::backdrop{background:color-mix(in oklab,var(--tinta) 25%,transparent)}
+dialog[open]{animation:pop 200ms var(--ease)}
+.dlg{padding:20px}
+.dlg h3{margin:0;font-size:17px;font-weight:600}
+.dlg p{margin:8px 0 0;color:var(--tinta-2);font-size:13.5px}
+.dlg label{display:block;margin-top:16px;font-size:12.5px;color:var(--tinta-2)}
+.dlg select{margin-top:6px;width:100%;height:36px;border:1px solid var(--linea);border-radius:var(--r);background:var(--hoja);font:inherit;color:var(--tinta);padding:0 10px}
+.dlg .row{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+.toast{position:fixed;right:20px;bottom:20px;background:var(--tinta);color:var(--hoja);padding:10px 14px;border-radius:var(--r);font-size:13px;display:flex;gap:8px;align-items:center;transform:translateY(8px);opacity:0;pointer-events:none;transition:transform 200ms var(--ease),opacity 200ms var(--ease);z-index:20}
+.toast.show{transform:none;opacity:1;pointer-events:auto}
+.toast button{background:none;border:1px solid color-mix(in oklab,var(--hoja) 30%,transparent);color:var(--hoja);border-radius:4px;padding:2px 8px;cursor:pointer}
+
+/* entrance */
+.rise{animation:rise 250ms var(--ease) both;animation-delay:calc(var(--b,0) * 60ms)}
+.lot{animation:rise 240ms var(--ease) both;animation-delay:calc(var(--i,0) * 30ms)}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+@keyframes rot{to{transform:rotate(360deg)}}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes ring{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.35);opacity:.15}}
+@keyframes sheen{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes sk{to{transform:translateX(100%)}}
+@keyframes draw{from{stroke-dashoffset:900}to{stroke-dashoffset:0}}
+.draw .lim{animation:draw 600ms var(--ease) both}
+.draw .lim + .lim{animation-delay:80ms}
+.band-fill{animation:fadein 260ms var(--ease) both}
+@keyframes fadein{from{opacity:0}}
+.mkin{animation:mkin 220ms var(--ease) both;animation-delay:calc(280ms + var(--i,0) * 12ms)}
+@keyframes mkin{from{opacity:0}}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+
+/* responsive */
+.lot-select{display:none}
+@media (max-width: 980px){
+  .app{grid-template-columns:1fr;background:none}
+  .rail{display:none}
+  .lot-select{display:flex;gap:8px;align-items:center;margin-bottom:18px}
+  .lot-select select{flex:1;height:38px;border:1px solid var(--linea);border-radius:var(--r);background:var(--hoja);font:inherit;color:var(--tinta);padding:0 10px}
+  main{padding:20px 24px 60px}
+}
+@media (max-width: 720px){
+  .top{padding:0 12px;gap:10px}
+  .top .sep,.ctx{display:none}
+  .net .lbl{display:none}
+  main{padding:16px 16px 56px}
+  h1{font-size:25px}
+  .summary{font-size:18px;margin-top:18px}
+  .actions{width:100%}
+  .actions .btn{flex:1 1 40%;justify-content:center;padding:0 8px;font-size:13px}
+  .actions .btn.primary{flex-basis:100%;order:-1;height:40px}
+  .axis{font-size:12px}
+  .facts{grid-template-columns:1fr 1fr}
+  .fact:first-child{grid-column:1/-1;border-bottom:1px solid var(--linea-2)}
+  .fact:nth-child(2),.fact:nth-child(4){border-left:0;padding-left:0}
+  .fact:nth-child(4){border-top:1px solid var(--linea-2)}
+  .fact:nth-child(3){border-top:0}
+  .fact:nth-child(3)+.fact{grid-column:1/-1}
+  .hero-n{font-size:64px}
+  .privacy{grid-template-columns:1fr}
+  .privacy > div + div{border-left:0;border-top:1px solid var(--linea)}
+  .steps{grid-template-columns:1fr 1fr}
+  .tbl thead{display:none}
+  .tbl,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%}
+  .tbl tr{padding:12px 0;border-bottom:1px solid var(--linea-2)}
+  .tbl td{border:0;padding:2px 0!important}
+  .tbl td.r{text-align:left}
+  .tbl td[data-l]::before{content:attr(data-l);display:inline-block;width:92px;color:var(--tinta-3);font-size:12px}
+  .tbl .who{padding-left:24px}
+  .toast{left:16px;right:16px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="7" width="20" height="8" rx="2" fill="oklch(92% .04 195)"/><line x1="1" y1="7" x2="21" y2="7" stroke="oklch(52% .11 195)" stroke-width="1.4"/><line x1="1" y1="15" x2="21" y2="15" stroke="oklch(52% .11 195)" stroke-width="1.4"/><circle cx="6" cy="11" r="1.7" fill="oklch(42% .1 195)"/><circle cx="11" cy="10.4" r="1.7" fill="oklch(42% .1 195)"/><circle cx="16" cy="11.6" r="1.7" fill="oklch(42% .1 195)"/></svg>
+      Lotproof
+    </div>
+    <span class="sep"></span>
+    <div class="ctx">Supplier <b>Kessler Präzisionsteile</b><span>(demo supplier)</span></div>
+    <span class="spacer"></span>
+    <button class="net" id="netBtn" title="Simulate a network error"><span class="dot"></span><span class="lbl">Preview testnet</span></button>
+    <button class="iconbtn" id="soundBtn" aria-label="Mute sounds" aria-pressed="false"><i class="ph-light ph-speaker-simple-high"></i></button>
+    <button class="iconbtn" aria-label="Help"><i class="ph-light ph-question"></i></button>
+  </header>
+
+  <nav class="rail" aria-label="Lots">
+    <label class="search"><i class="ph-light ph-magnifying-glass"></i><input id="q" placeholder="Find a lot" aria-label="Find a lot"></label>
+    <div id="groups"></div>
+    <p class="rail-foot">Lots appear here when the measuring station commits them on Midnight. Counts come from the supplier's proof.</p>
+  </nav>
+
+  <main>
+    <div class="sheet" id="sheet">
+      <div class="lot-select"><i class="ph-light ph-stack"></i><select id="lotSel" aria-label="Lot"></select></div>
+
+      <div class="head rise" style="--b:0">
+        <div class="t">
+          <div class="crumb"><span>DRW-4471 rev C</span><i class="ph-light ph-caret-right"></i><span>Drive shaft</span><i class="ph-light ph-caret-right"></i><span>Bearing seat diameter</span></div>
+          <h1><span id="lotName">LOT 1109-A</span> <span id="badge" class="badge ok"></span></h1>
+        </div>
+        <div class="actions">
+          <button class="btn" id="measureBtn"><i class="ph-light ph-ruler"></i>Measure a new lot</button>
+          <button class="btn danger" id="attackBtn"><i class="ph-light ph-pencil-slash"></i>Try to change the numbers</button>
+          <button class="btn primary" id="verifyBtn"><i class="ph-light ph-seal-check"></i>Verify on Midnight</button>
+        </div>
+      </div>
+
+      <p class="summary rise" style="--b:1" id="summary"></p>
+      <div class="since rise" style="--b:1" id="since"></div>
+
+      <section class="run" id="run" aria-live="polite">
+        <div class="run-h"><b id="runTitle">Measuring a new lot</b><span class="eta" id="runEta"></span></div>
+        <ol class="steps" id="steps">
+          <li data-s="measuring"><span class="bar"></span><i class="ph-light ph-ruler"></i>Measuring</li>
+          <li data-s="committing"><span class="bar"></span><i class="ph-light ph-fingerprint"></i>Committing</li>
+          <li data-s="proving"><span class="bar"></span><i class="ph-light ph-circle-notch"></i>Proving</li>
+          <li data-s="verdict"><span class="bar"></span><i class="ph-light ph-gavel"></i>Verdict</li>
+        </ol>
+        <div class="msg" id="runMsg"></div>
+      </section>
+
+      <div class="facts rise" style="--b:2" id="facts">
+        <div class="fact">
+          <div class="k"><i class="ph-light ph-check-circle"></i>Parts inside the band</div>
+          <div class="hero-n num" id="heroN"><span id="inN">32</span><small>/ <span id="totN">32</span></small><span class="u">parts</span></div>
+        </div>
+        <div class="fact">
+          <div class="k"><i class="ph-light ph-arrows-out-line-vertical"></i>Band</div>
+          <div class="v num">11.950 to 12.050 mm</div>
+          <div class="note num">nominal 12.000 mm, ± 0.050 mm</div>
+        </div>
+        <div class="fact">
+          <div class="k"><i class="ph-light ph-scales"></i>Acceptance</div>
+          <div class="v num">at most 1 part out</div>
+          <div class="note num" id="accNote">0 out of 32</div>
+        </div>
+        <div class="fact">
+          <div class="k"><i class="ph-light ph-cpu"></i>Measuring station</div>
+          <div class="v">CMM K-07</div>
+          <div class="note"><span class="mono">key 3f9c…e21b</span>, registered on-chain</div>
+        </div>
+      </div>
+
+      <section class="chart-wrap rise" style="--b:3">
+        <div class="sec-h">
+          <h2>Tolerance chart</h2>
+          <div class="legend">
+            <span><i class="sw" style="background:var(--dentro)"></i>Inside band, value private</span>
+            <span><i class="sw" style="background:var(--fuera)"></i>Outside band, value private</span>
+            <span><i class="ph-light ph-eye"></i>Disclosed value</span>
+          </div>
+        </div>
+        <div class="chart" id="chart"></div>
+        <div class="privacy">
+          <div><i class="ph-light ph-globe-simple st-ok"></i><div><b>Public on Midnight</b><p>Band, count inside, verdict, the station commitment and the transactions.</p></div></div>
+          <div><i class="ph-light ph-lock-simple" style="color:var(--tinta-2)"></i><div><b>Private to the supplier</b><p id="privTxt">All 32 measurements. Marks sit flat in the band because their height is not known to you.</p></div></div>
+        </div>
+      </section>
+
+      <section class="proofs rise" style="--b:4">
+        <div class="sec-h"><h2>Proof trail</h2><button class="btn" id="discloseBtn"><i class="ph-light ph-eye"></i>Disclose a disputed part</button></div>
+        <table class="tbl" id="tbl">
+          <thead><tr>
+            <th><button>Event <i class="ph-light ph-caret-up-down"></i></button></th>
+            <th><button>Time <i class="ph-light ph-caret-up-down"></i></button></th>
+            <th class="r"><button>Block <i class="ph-light ph-caret-up-down"></i></button></th>
+            <th>Transaction</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="contract"><i class="ph-light ph-file-code"></i>Contract <span class="mono">697a5a4d…6321aa07</span><button class="copy" aria-label="Copy contract address" data-copy="697a5a4d…6321aa07"><i class="ph-light ph-copy"></i></button><a href="#" class="tx">Open in explorer <i class="ph-light ph-arrow-square-out"></i></a><span>Circuits: registerStation, publishSpec, commitLot, proveLot, disclosePart</span></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" class="dlg">
+    <h3>Disclose a disputed part</h3>
+    <p>The supplier opens one measurement against the station commitment. The other parts stay private.</p>
+    <label for="partSel">Part</label>
+    <select id="partSel"></select>
+    <div class="row"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok" id="dlgOk"><i class="ph-light ph-eye"></i>Disclose</button></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"><i class="ph-light ph-wifi-slash"></i><span id="toastTxt"></span><button id="toastBtn">Retry</button></div>
+
+<script>
+const TX_C = "b8f95099…a7f9a37", TX_P = "1250e917…af20d18d";
+const LOTS = [
+  {id:"1109-A", n:32, inside:32, state:"accepted", out:[], c:{t:"Nov 7, 09:42", b:"184 220", tx:TX_C}, p:{t:"Nov 7, 11:05", b:"184 391", tx:TX_P}, sub:"Accepted"},
+  {id:"1109-B", n:32, inside:31, state:"accepted", out:[17], c:{t:"Nov 7, 13:18", b:"184 502"}, p:{t:"Nov 7, 14:02", b:"184 557"}, sub:"Accepted, at the limit"},
+  {id:"1109-C", n:32, inside:null, state:"pending", out:[], c:{t:"Nov 8, 08:51", b:"185 010"}, p:null, sub:"Committed, proof pending"},
+  {id:"1108-D", n:32, inside:30, state:"rejected", out:[3,22], c:{t:"Nov 5, 10:27", b:"182 904"}, p:{t:"Nov 5, 12:40", b:"183 077"}, disclose:{part:3, mm:12.081}, sub:"Rejected, 2 out"},
+  {id:"1108-T", n:32, inside:null, state:"refused", out:[], c:{t:"Nov 5, 15:12", b:"183 240"}, p:{t:"Nov 5, 16:30", b:"183 318"}, sub:"Proof refused"}
+];
+const ICON = {accepted:["ph-check-circle","st-ok"], rejected:["ph-x-circle","st-bad"], pending:["ph-circle-dashed","st-pend spin"], refused:["ph-prohibit","st-bad"]};
+let cur = LOTS[0], disclosed = null, muted = false;
+const $ = s => document.querySelector(s);
+
+/* sound: tiny synthesized ticks, only on user gestures */
+let ac;
+try{ muted = localStorage.getItem("lp-muted")==="1"; }catch(e){}
+function tick(kind){
+  if(muted) return;
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    const f = {ok:880, bad:220, nav:660, step:520}[kind]||600;
+    o.frequency.value=f; o.type = kind==="bad"?"triangle":"sine";
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.22, ac.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+(kind==="bad"?0.28:0.12));
+    o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime+0.3);
+  }catch(e){}
+}
+function setMuteUI(){
+  $("#soundBtn").setAttribute("aria-pressed", muted);
+  $("#soundBtn").setAttribute("aria-label", muted?"Unmute sounds":"Mute sounds");
+  $("#soundBtn i").className = "ph-light " + (muted?"ph-speaker-simple-slash":"ph-speaker-simple-high");
+}
+$("#soundBtn").onclick = () => { muted=!muted; try{localStorage.setItem("lp-muted",muted?"1":"0")}catch(e){} setMuteUI(); };
+setMuteUI();
+
+/* index */
+function renderIndex(filter=""){
+  const f = filter.trim().toLowerCase();
+  const items = LOTS.filter(l => !f || l.id.toLowerCase().includes(f));
+  $("#groups").innerHTML = `<div class="group"><h3>DRW-4471 rev C <span>${items.length} lots</span></h3>${
+    items.map((l,i)=>{
+      const [ic,cl]=ICON[l.state];
+      const ct = l.inside==null ? "" : `${l.inside}/${l.n}`;
+      return `<button class="lot" style="--i:${Math.min(i,7)}" data-id="${l.id}" aria-current="${l===cur}"><i class="ph-light ${ic} ${cl}"></i><span><span class="nm">LOT ${l.id}</span><span class="sub">${l.sub}</span></span><span class="ct num">${ct}</span></button>`;
+    }).join("") || `<p class="rail-foot" style="margin-top:8px">No lot matches “${filter}”.</p>`}</div>`;
+  $("#groups").querySelectorAll(".lot").forEach(b=>b.onclick=()=>select(b.dataset.id));
+  $("#lotSel").innerHTML = LOTS.map(l=>`<option value="${l.id}" ${l===cur?"selected":""}>LOT ${l.id}  ${l.inside==null?"":l.inside+"/"+l.n+"  "}${l.sub}</option>`).join("");
+}
+$("#q").oninput = e => renderIndex(e.target.value);
+$("#lotSel").onchange = e => select(e.target.value);
+
+/* chart */
+let W=1000, H=330, X0=70, X1=W-20;
+function sizeChart(){ const n=innerWidth<600; W=n?440:1000; H=n?320:330; X0=n?50:70; X1=W-(n?8:20); return n; }
+const MM_TOP=12.100, MM_BOT=11.900, Y_T=30, Y_B=250;
+const y = mm => Y_T + (MM_TOP-mm)/(MM_TOP-MM_BOT)*(Y_B-Y_T);
+const OUT_LANE = 292;
+const xOf = i => X0 + (i-0.5)*(X1-X0)/32;
+let rz; addEventListener('resize',()=>{clearTimeout(rz); rz=setTimeout(()=>{ const n=innerWidth<600; if(n!==(W===440)) render(cur); },150);});
+const jit = i => (((i*37)%11)-5)*2.6;
+
+function chartSVG(l){
+  const narrow=sizeChart();
+  const yU=y(12.05), yL=y(11.95), yN=y(12.0), mid=(yU+yL)/2;
+  const ticks=[12.100,12.050,12.000,11.950,11.900];
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Tolerance band for LOT ${l.id}: ${l.inside==null?"no proof yet":l.inside+" of "+l.n+" parts inside"}">`;
+  s+=`<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="oklch(88% .01 250)" stroke-width="1"/></pattern></defs>`;
+  s+=`<rect x="${X0}" y="${Y_T}" width="${X1-X0}" height="${yU-Y_T}" fill="url(#hatch)" opacity=".55"/>`;
+  s+=`<rect x="${X0}" y="${yL}" width="${X1-X0}" height="${Y_B-yL}" fill="url(#hatch)" opacity=".55"/>`;
+  s+=`<rect class="band-fill" x="${X0}" y="${yU}" width="${X1-X0}" height="${yL-yU}" fill="var(--banda)"/>`;
+  ticks.forEach(t=>{ s+=`<text class="axis ${t===12.05||t===11.95||t===12?"strong":""}" x="${X0-10}" y="${y(t)+4}" text-anchor="end">${t.toFixed(3)}</text>`; });
+  s+=`<text class="axis" x="${X1}" y="${yU-6}" text-anchor="end">USL 12.050 mm</text>`;
+  s+=`<text class="axis" x="${X1}" y="${yL+15}" text-anchor="end">LSL 11.950 mm</text>`;
+  s+=`<line class="nom" x1="${X0}" x2="${X1}" y1="${yN}" y2="${yN}"/>`;
+  s+=`<line class="lim" x1="${X0}" x2="${X1}" y1="${yU}" y2="${yU}"/>`;
+  s+=`<line class="lim" x1="${X0}" x2="${X1}" y1="${yL}" y2="${yL}"/>`;
+  s+=`<line x1="${X0}" x2="${X1}" y1="${OUT_LANE-16}" y2="${OUT_LANE-16}" stroke="var(--linea-2)"/>`;
+  s+=`<text class="axis" x="${X0-10}" y="${OUT_LANE+4}" text-anchor="end">out</text>`;
+  for(let i=1;i<=32;i++){
+    const isOut = l.out.includes(i);
+    const cls = l.state==="pending" ? "hollow" : l.state==="refused" ? "refused" : isOut ? "out" : "in";
+    const cy = isOut ? OUT_LANE : mid + jit(i);
+    const dsc = l.disclose && l.disclose.part===i;
+    const dy = dsc ? (y(l.disclose.mm) - cy) : 0;
+    s+=`<g class="mk mkin ${dsc?"hit":""}" data-p="${i}" data-dy="${dy}" style="--i:${i}">`;
+    s+=`<circle class="ring" cx="${xOf(i)}" cy="${cy}" r="${narrow?7:10}"/>`;
+    s+=`<circle class="${cls}" cx="${xOf(i)}" cy="${cy}" r="${narrow?3.6:5.2}"/>`;
+    if(dsc){
+      const um = Math.round((l.disclose.mm-12)*1000);
+      const lbl = `#${i}  ${l.disclose.mm.toFixed(3)} mm  +${um} µm`;
+      const w = lbl.length*7.4+16, bx = Math.min(xOf(i)+12, X1-w);
+      s+=`<g class="callout"><rect x="${bx}" y="${cy-30}" width="${w}" height="22" rx="4"/><text x="${bx+8}" y="${cy-15}">${lbl}</text></g>`;
+    }
+    s+=`</g>`;
+  }
+  (narrow?[1,16,32]:[1,8,16,24,32]).forEach(i=>{ s+=`<text class="axis" x="${xOf(i)}" y="${H-6}" text-anchor="middle">#${i}</text>`; });
+  s+=`</svg>`;
+  const foot = l.state==="pending" ? "Station commitment on-chain. Marks are hollow until the supplier proves the count."
+    : l.state==="refused" ? "The contract refused the proof. No count was recorded for this lot."
+    : `Parts in lot order, #1 to #32. Height inside the band is a fixed placeholder; only a disclosed part shows its real value.`;
+  return s + `<div class="chart-foot"><span>${foot}</span><span class="num">Last update ${l.p?l.p.t:l.c.t}</span></div>`;
+}
+
+function applyDisclose(animate){
+  document.querySelectorAll(".mk").forEach(g=>g.classList.remove("disclosed"));
+  document.querySelectorAll(".mk").forEach(g=>{ if(g.dataset.dy!=="0") g.style.transform=""; });
+  if(!disclosed) return;
+  const g = document.querySelector(`.mk[data-p="${disclosed}"]`);
+  if(!g) return;
+  g.style.transform = `translateY(${g.dataset.dy}px)`;
+  g.classList.add("disclosed");
+}
+
+/* summary, facts, table */
+function render(l, loading){
+  $("#lotName").textContent = "LOT " + l.id;
+  const b = $("#badge");
+  const map = {accepted:["ok","ph-check-circle","Accepted"], rejected:["bad","ph-x-circle","Rejected"], pending:["pend","ph-hourglass-medium","Proof pending"], refused:["bad","ph-prohibit","Proof refused"]};
+  const [bc,bi,bt]=map[l.state];
+  b.className="badge "+bc; b.innerHTML=`<i class="ph-light ${bi}"></i>${bt}`;
+  const out = l.inside==null?null:l.n-l.inside;
+  let sum;
+  if(l.state==="pending") sum = `Lot ${l.id}: the station committed <strong>32 measurements</strong> on Nov 8. The supplier has not published the proof yet, so there is no count to accept.`;
+  else if(l.state==="refused") sum = `Lot ${l.id}: the contract <strong class="out">refused the supplier's proof</strong>. The measurements do not match what station CMM K-07 committed at measuring time.`;
+  else if(l.state==="rejected") sum = `Lot ${l.id}: <strong>${l.inside} of ${l.n} parts</strong> inside 12.000 ± 0.050 mm. <strong class="out">Rejected</strong>: ${out} out, above the customer's limit of 1 defect.`;
+  else sum = `Lot ${l.id}: <strong>${l.inside} of ${l.n} parts</strong> inside 12.000 ± 0.050 mm. <strong class="in">Accepted</strong> under the customer's limit of 1 defect${out===1?", with 1 out, at the limit":""}.`;
+  $("#summary").innerHTML = sum;
+  $("#since").innerHTML = l.p ? `Proof verified on Preview testnet, ${l.p.t}. Measured at station CMM K-07, ${l.c.t}.` : `Committed by station CMM K-07, ${l.c.t}. Proof expected after the supplier runs proveLot, about 20 s.`;
+  $("#inN").textContent = l.inside==null ? "–" : l.inside;
+  $("#totN").textContent = l.n;
+  $("#heroN").style.color = l.state==="rejected"||l.state==="refused" ? "oklch(48% .18 28)" : "";
+  $("#accNote").textContent = out==null ? "no count recorded" : `${out} out of ${l.n}`;
+  $("#chart").innerHTML = chartSVG(l);
+  $("#chart").classList.remove("draw"); void $("#chart").offsetWidth; $("#chart").classList.add("draw");
+  $("#privTxt").textContent = disclosed ? `${l.n-1} of ${l.n} measurements. Part #${disclosed} was disclosed by the supplier; the rest stay flat in the band.` : `All ${l.n} measurements. Marks sit flat in the band because their height is not known to you.`;
+  const lnk = tx => tx ? `<a class="tx mono" href="#">${tx} <i class="ph-light ph-arrow-square-out"></i></a> <button class="copy" aria-label="Copy transaction" data-copy="${tx}"><i class="ph-light ph-copy"></i></button>` : `<span class="mono" style="color:var(--tinta-3)">from indexer</span>`;
+  let rows = `<tr><td><div class="what"><i class="ph-light ph-fingerprint"></i>Station commitment</div><div class="who">CMM K-07, salted hash of 32 values</div></td><td data-l="Time" class="num">${l.c.t}</td><td data-l="Block" class="r num">${l.c.b}</td><td data-l="Transaction">${lnk(l.c.tx)}</td><td data-l="Status"><span class="chip st-ok"><i class="ph-light ph-check"></i>On-chain</span></td></tr>`;
+  if(l.state==="pending") rows += `<tr class="empty-row"><td><div class="what"><i class="ph-light ph-hourglass-medium st-pend"></i>Supplier proof</div><div class="who">proveLot, count inside the band</div></td><td data-l="Time">waiting</td><td data-l="Block" class="r">–</td><td data-l="Transaction">–</td><td data-l="Status"><span class="chip st-pend"><i class="ph-light ph-circle-dashed"></i>Pending</span></td></tr>`;
+  else if(l.state==="refused") rows += `<tr><td><div class="what"><i class="ph-light ph-prohibit st-bad"></i>Supplier proof</div><div class="who">“Measurements do not match the station commitment”</div></td><td data-l="Time" class="num">${l.p.t}</td><td data-l="Block" class="r num">${l.p.b}</td><td data-l="Transaction"><span class="mono" style="color:var(--tinta-3)">not recorded</span></td><td data-l="Status"><span class="chip st-bad"><i class="ph-light ph-x"></i>Refused</span></td></tr>`;
+  else rows += `<tr><td><div class="what"><i class="ph-light ph-seal-check"></i>Supplier proof</div><div class="who">proveLot, ${l.inside} of ${l.n} inside</div></td><td data-l="Time" class="num">${l.p.t}</td><td data-l="Block" class="r num">${l.p.b}</td><td data-l="Transaction">${lnk(l.p.tx)}</td><td data-l="Status"><span class="chip st-ok"><i class="ph-light ph-check"></i>Verified</span></td></tr>`;
+  if(disclosed && l.disclose) rows += `<tr><td><div class="what"><i class="ph-light ph-eye"></i>Disclosed part #${l.disclose.part}</div><div class="who">disclosePart, ${l.disclose.mm.toFixed(3)} mm, out of band</div></td><td data-l="Time" class="num">Nov 6, 09:14</td><td data-l="Block" class="r num">183 602</td><td data-l="Transaction"><span class="mono" style="color:var(--tinta-3)">from indexer</span></td><td data-l="Status"><span class="chip st-ok"><i class="ph-light ph-check"></i>Matches commitment</span></td></tr>`;
+  $("#tbody").innerHTML = rows;
+  $("#discloseBtn").disabled = !l.disclose;
+  $("#discloseBtn").title = l.disclose ? "" : "Only the supplier can disclose, and only for a lot with a part in dispute";
+  $("#verifyBtn").disabled = !l.p || l.state==="refused";
+  applyDisclose();
+  bindCopy();
+}
+function bindCopy(){
+  document.querySelectorAll(".copy").forEach(c=>c.onclick=()=>{ try{navigator.clipboard.writeText(c.dataset.copy)}catch(e){} c.innerHTML='<i class="ph-light ph-check"></i>'; tick("nav"); setTimeout(()=>c.innerHTML='<i class="ph-light ph-copy"></i>',1200); });
+}
+
+function setSkeleton(on){
+  ["#summary","#since","#heroN","#chart","#tbody"].forEach(s=>$(s).classList.toggle("sk",on));
+  document.querySelectorAll(".fact .v,.fact .note").forEach(e=>e.classList.toggle("sk",on));
+}
+function select(id){
+  cur = LOTS.find(l=>l.id===id); disclosed=null;
+  $("#run").className="run";
+  renderIndex($("#q").value); tick("nav");
+  setSkeleton(true);
+  setTimeout(()=>{ setSkeleton(false); render(cur); }, 380);
+}
+
+/* disclose */
+$("#discloseBtn").onclick = () => {
+  if(!cur.disclose) return;
+  $("#partSel").innerHTML = cur.out.map(p=>`<option value="${p}">Part #${p}${p===cur.disclose.part?" (in dispute)":""}</option>`).join("");
+  $("#dlg").showModal();
+};
+$("#dlg").addEventListener("close", ()=>{
+  if($("#dlg").returnValue!=="ok") return;
+  disclosed = cur.disclose.part; render(cur); tick("ok");
+});
+
+/* demo runs */
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+let running=false;
+async function runDemo(attack){
+  if(running) return; running=true;
+  [$("#measureBtn"),$("#attackBtn")].forEach(b=>b.disabled=true);
+  const run=$("#run"); run.className="run show";
+  $("#runTitle").textContent = attack ? "Supplier edits 1 value after the station measured" : "Measuring LOT 1110-A";
+  $("#runMsg").innerHTML = "";
+  const steps=[...document.querySelectorAll("#steps li")]; steps.forEach(s=>s.className="");
+  const order=[["measuring",900,"CMM K-07 measuring 32 parts"],["committing",1100,"Publishing the station commitment, about 20 s"],["proving",1800,"Generating the proof locally, about 20 s"]];
+  let left=40;
+  for(const [k,ms,eta] of order){
+    const li=steps.find(s=>s.dataset.s===k); li.className="now"; $("#runEta").textContent=eta; tick("step");
+    await sleep(ms); li.className="done";
+  }
+  const v=steps.find(s=>s.dataset.s==="verdict");
+  if(attack){
+    v.className="fail"; run.classList.add("bad"); $("#runEta").textContent="";
+    $("#runTitle").textContent="Proof refused by the contract";
+    $("#runMsg").innerHTML=`<code>Measurements do not match the station commitment</code>. Part #12 was changed from the value CMM K-07 hashed. Nothing was recorded; see LOT 1108-T for the same case.`;
+    tick("bad");
+  } else {
+    v.className="done"; $("#runEta").textContent="";
+    $("#runTitle").textContent="LOT 1110-A accepted, 32 of 32 inside";
+    $("#runMsg").textContent="Demo run. In the product the new lot joins the index once the indexer confirms both transactions.";
+    tick("ok");
+  }
+  [$("#measureBtn"),$("#attackBtn")].forEach(b=>b.disabled=false); running=false;
+}
+$("#measureBtn").onclick=()=>runDemo(false);
+$("#attackBtn").onclick=()=>runDemo(true);
+$("#verifyBtn").onclick=()=>{ tick("ok"); toast("Opening the proof transaction in the Midnight explorer", false); };
+
+/* network error demo */
+function toast(t, err){
+  $("#toastTxt").textContent=t; $("#toast i").className="ph-light "+(err?"ph-wifi-slash":"ph-arrow-square-out");
+  $("#toastBtn").style.display=err?"":"none";
+  $("#toast").classList.add("show"); clearTimeout(toast.t);
+  if(!err) toast.t=setTimeout(()=>$("#toast").classList.remove("show"),2400);
+}
+$("#netBtn").onclick=()=>{ $("#netBtn").classList.add("err"); $("#netBtn .lbl").textContent="Indexer unreachable"; tick("bad"); toast("Cannot reach the Preview testnet indexer. Showing the last confirmed data.", true); };
+$("#toastBtn").onclick=()=>{ $("#netBtn").classList.remove("err"); $("#netBtn .lbl").textContent="Preview testnet"; $("#toast").classList.remove("show"); tick("nav"); };
+
+/* boot: skeleton first, never zeros */
+const qs=new URLSearchParams(location.search);
+if(qs.get("lot")) cur = LOTS.find(l=>l.id===qs.get("lot"))||cur;
+renderIndex();
+setSkeleton(true);
+setTimeout(()=>{ setSkeleton(false); if(qs.get("disclose")&&cur.disclose) disclosed=cur.disclose.part; render(cur); if(qs.get("run")==="attack") runDemo(true); }, 260);
+</script>
+</body>
+</html>

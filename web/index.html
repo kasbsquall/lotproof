@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lotproof</title>
+<meta name="description" content="A supplier proves to its customer that a lot is inside the drawing tolerance, on Midnight, without handing over the measurements.">
+<meta name="theme-color" content="#f6f8f9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css">
+<link rel="stylesheet" href="styles.css?v=lp7">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='7' width='20' height='8' rx='2' fill='%23c9ecea'/%3E%3Cline x1='1' y1='7' x2='21' y2='7' stroke='%23157f80' stroke-width='1.4'/%3E%3Cline x1='1' y1='15' x2='21' y2='15' stroke='%23157f80' stroke-width='1.4'/%3E%3Ccircle cx='6' cy='11' r='1.7' fill='%23106566'/%3E%3Ccircle cx='11' cy='11' r='1.7' fill='%23106566'/%3E%3Ccircle cx='16' cy='11' r='1.7' fill='%23106566'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="7" width="20" height="8" rx="2" fill="oklch(92% .04 195)"/><line x1="1" y1="7" x2="21" y2="7" stroke="oklch(52% .11 195)" stroke-width="1.4"/><line x1="1" y1="15" x2="21" y2="15" stroke="oklch(52% .11 195)" stroke-width="1.4"/><circle cx="6" cy="11" r="1.7" fill="oklch(42% .1 195)"/><circle cx="11" cy="11" r="1.7" fill="oklch(42% .1 195)"/><circle cx="16" cy="11" r="1.7" fill="oklch(42% .1 195)"/></svg>
+      Lotproof
+    </div>
+    <span class="sep"></span>
+    <div class="ctx">Customer view <span>of a demo supplier's lots</span></div>
+    <span class="spacer"></span>
+    <span class="net sk-pill" id="net" role="status"><span class="dot"></span><span class="lbl">Connecting</span></span>
+    <button class="btn ghost" id="consoleBtn" type="button" disabled><i class="ph-light ph-factory"></i><span class="lbl">Supplier console</span></button>
+    <button class="iconbtn" id="soundBtn" type="button" aria-pressed="false" aria-label="Turn sounds on"><i class="ph-light ph-speaker-simple-slash"></i></button>
+  </header>
+
+  <nav class="rail" aria-label="Lots">
+    <label class="search"><i class="ph-light ph-magnifying-glass"></i><input id="q" placeholder="Find a lot" aria-label="Find a lot" autocomplete="off"></label>
+    <div id="groups">
+      <div class="group"><h3><span class="sk">DRW-0000-rev-C</span></h3>
+        <div class="lot-sk"><span class="sk">LOT-000000-000</span></div>
+        <div class="lot-sk"><span class="sk">LOT-000000-000</span></div>
+        <div class="lot-sk"><span class="sk">LOT-000000-000</span></div>
+      </div>
+    </div>
+    <p class="rail-foot">A lot appears here once the measuring station commits it on Midnight. Counts come from the supplier's proof, read from the contract.</p>
+  </nav>
+
+  <main>
+    <div class="sheet" id="sheet">
+      <div class="lot-select"><i class="ph-light ph-stack"></i><select id="lotSel" aria-label="Lot" disabled><option>Loading lots</option></select></div>
+
+      <div class="head rise" style="--b:0">
+        <div class="t">
+          <div class="crumb" id="crumb"><span class="sk">Drawing DRW-0000-rev-C</span></div>
+          <h1><span id="lotName" class="sk">LOT-000000-000</span> <span id="badge" class="badge" hidden></span></h1>
+        </div>
+        <div class="actions">
+          <div class="split">
+            <button class="btn" id="measureBtn" type="button" disabled><i class="ph-light ph-ruler"></i>Measure a new lot</button>
+            <label class="defects" title="How many parts the demo station plants outside the band">
+              <span>with</span>
+              <select id="defects" aria-label="Parts planted out of band">
+                <option value="0">0 out</option>
+                <option value="1" selected>1 out</option>
+                <option value="2">2 out</option>
+                <option value="3">3 out</option>
+                <option value="4">4 out</option>
+              </select>
+            </label>
+          </div>
+          <button class="btn danger" id="tamperBtn" type="button" disabled><i class="ph-light ph-pencil-slash"></i>Try to change the numbers</button>
+          <button class="btn primary" id="verifyBtn" type="button" disabled><i class="ph-light ph-seal-check"></i>Verify on Midnight</button>
+        </div>
+      </div>
+
+      <section class="run" id="run" aria-live="polite" hidden></section>
+
+      <section class="notice" id="notice" hidden></section>
+
+      <div id="lotView">
+        <p class="summary rise" style="--b:1" id="summary"><span class="sk">LOT-000000-000: 00 of 00 parts inside 00.000 ± 0.000 mm. Waiting for the contract.</span></p>
+        <div class="since rise" style="--b:1" id="since"><span class="sk">Proof recorded at block 000 on the network, Nov 0, 00:00:00.</span></div>
+
+        <div class="facts rise" style="--b:2" id="facts">
+          <div class="fact">
+            <div class="k"><i class="ph-light ph-check-circle"></i>Parts inside the band</div>
+            <div class="hero-n num" id="heroN"><span class="sk">00 / 00</span></div>
+          </div>
+          <div class="fact">
+            <div class="k"><i class="ph-light ph-arrows-out-line-vertical"></i>Band</div>
+            <div class="v num" id="bandV"><span class="sk">00.000 to 00.000 mm</span></div>
+            <div class="note num" id="bandN"><span class="sk">nominal 00.000 mm</span></div>
+          </div>
+          <div class="fact">
+            <div class="k"><i class="ph-light ph-scales"></i>Acceptance</div>
+            <div class="v num" id="accV"><span class="sk">at most 0 part out</span></div>
+            <div class="note num" id="accN"><span class="sk">0 out of 00</span></div>
+          </div>
+          <div class="fact">
+            <div class="k"><i class="ph-light ph-cpu"></i>Measuring station</div>
+            <div class="v" id="stV"><span class="sk">key 0000…0000</span></div>
+            <div class="note" id="stN"><span class="sk">registered on-chain</span></div>
+          </div>
+        </div>
+
+        <section class="chart-wrap rise" style="--b:3" aria-labelledby="chartH">
+          <div class="sec-h">
+            <h2 id="chartH">Tolerance chart</h2>
+            <div class="legend">
+              <span><i class="sw" style="background:var(--dentro)"></i>Inside the band, value private</span>
+              <span><i class="sw" style="background:var(--fuera)"></i>Outside the band, value and position private</span>
+              <span><i class="ph-light ph-eye"></i>Disclosed by the supplier</span>
+            </div>
+          </div>
+          <div class="chart" id="chart"><div class="chart-sk sk"></div></div>
+          <div class="privacy">
+            <div><i class="ph-light ph-globe-simple st-ok"></i><div><b>Public on Midnight</b><p>The band, the count inside, the verdict, the station commitment, disclosed parts and the transactions.</p></div></div>
+            <div><i class="ph-light ph-lock-simple" style="color:var(--tinta-2)"></i><div><b>Private to the supplier</b><p id="privTxt">Every measurement, and which parts are the ones outside the band.</p></div></div>
+          </div>
+        </section>
+
+        <section class="proofs rise" style="--b:4" id="proofs" aria-labelledby="proofsH">
+          <div class="sec-h"><h2 id="proofsH" tabindex="-1">Proof trail</h2><button class="btn" id="consoleBtn2" type="button" disabled><i class="ph-light ph-factory"></i>Disclose a part, as the supplier</button></div>
+          <table class="tbl" id="tbl">
+            <thead><tr><th>Event</th><th>Time</th><th class="r">Block</th><th>Transaction</th><th>Status</th></tr></thead>
+            <tbody id="tbody">
+              <tr><td><span class="sk">Station commitment row</span></td><td><span class="sk">Nov 0, 00:00</span></td><td class="r"><span class="sk">000</span></td><td><span class="sk">0000000…00000000</span></td><td><span class="sk">On-chain</span></td></tr>
+              <tr><td><span class="sk">Supplier proof row</span></td><td><span class="sk">Nov 0, 00:00</span></td><td class="r"><span class="sk">000</span></td><td><span class="sk">0000000…00000000</span></td><td><span class="sk">Verified</span></td></tr>
+            </tbody>
+          </table>
+          <div class="contract" id="contract"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<dialog id="console" class="drawer" aria-labelledby="conH">
+  <div class="drawer-in">
+    <div class="drawer-h">
+      <div>
+        <h3 id="conH"><i class="ph-light ph-factory"></i>Supplier console</h3>
+        <p class="warn"><i class="ph-light ph-lock-simple"></i>Supplier console: only the supplier's machine sees this. In this demo the Lotproof service plays that machine.</p>
+      </div>
+      <button class="iconbtn" type="button" id="conClose" aria-label="Close supplier console"><i class="ph-light ph-x"></i></button>
+    </div>
+    <div id="conBody"></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><i class="ph-light ph-info"></i><span id="toastTxt"></span><button id="toastBtn" type="button" hidden>Retry</button></div>
+
+<script type="module" src="app.js?v=lp7"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+﻿click.ogg <- kenney_interface/select_002.ogg
+accepted.ogg <- kenney_interface/confirmation_004.ogg
+rejected.ogg <- kenney_interface/maximize_008.ogg
+disclosed.ogg <- kenney_interface/glass_001.ogg
+License: CC0-1.0, Kenney Interface Sounds. See LICENSE-kenney.txt

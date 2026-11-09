@@ -1,0 +1,10 @@
+node_modules
+data
+midnight-level-db
+logs
+.git
+.env
+.env.*
+deploy/.env
+deployment*.json
+*.log

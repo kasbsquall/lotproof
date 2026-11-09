@@ -11,9 +11,9 @@ Customers ask suppliers for the raw measurements of every lot before they accept
 
 | | |
 | --- | --- |
-| Live demo | pending (see [Status](#status)) |
+| Live demo | https://lotproof.45-76-12-143.sslip.io (Midnight Preview) |
 | Video | pending |
-| Contract on Preview | pending: the Preview faucet was down on 9 Nov 2026 |
+| Contract on Preview | `e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49` |
 | Contract on local devnet | deployed and exercised end to end, see [How to verify](#how-to-verify-in-5-minutes) |
 | Tests | 19 simulator tests (10 of them inputs the contract must refuse) and 4 end-to-end tests with real proofs |
 
@@ -101,8 +101,10 @@ MIDNIGHT_NETWORK=local yarn server     # http://127.0.0.1:8787
 
 Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repository is new in this wave.
 
-- Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views.
-- Pending: deployment on Preview (the Preview faucet answered `SERVICES_DOWN` on 9 Nov 2026), public demo URL, video and deck.
+- Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views, deployment on Preview with a public demo.
+- Pending: video and deck.
+
+The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 65 s on Preview.
 
 ## License
 

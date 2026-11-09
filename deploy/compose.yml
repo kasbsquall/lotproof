@@ -1,0 +1,56 @@
+# This file is part of Lotproof.
+# SPDX-License-Identifier: Apache-2.0
+# Public demo on a small VM, against Midnight Preview.
+# Only the demo API is published, and only on 127.0.0.1 (a reverse proxy in
+# front terminates TLS). The proof server is reachable only inside this network.
+# Secrets come from deploy/.env (chmod 600, never committed):
+#   MIDNIGHT_PREVIEW_SEED=<64 hex>
+#   LOTPROOF_STORE_PASSWORD=<strong password>
+services:
+  proof-server:
+    image: 'midnightntwrk/proof-server:9.0.0'
+    command: ['midnight-proof-server', '-v']
+    restart: unless-stopped
+    mem_limit: 3g
+    cpus: 1.2
+    healthcheck:
+      test: ['CMD-SHELL', 'echo > /dev/tcp/127.0.0.1/6300']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: 'lotproof-demo:local'
+    restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 0.6
+    env_file: .env
+    environment:
+      MIDNIGHT_NETWORK: preview
+      MIDNIGHT_PROOF_SERVER: 'http://proof-server:6300'
+      HOST: 0.0.0.0
+      PORT: '8787'
+      JOBS_PER_IP_PER_HOUR: '6'
+    ports:
+      - '127.0.0.1:8787:8787'
+    volumes:
+      - lotproof-data:/app/data
+      - lotproof-store:/app/midnight-level-db
+      - ../web:/app/web:ro
+    depends_on:
+      proof-server:
+        condition: service_healthy
+
+volumes:
+  lotproof-data:
+  lotproof-store:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.232.0.0/24
