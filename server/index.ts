@@ -6,6 +6,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { LotproofChain, logger, NETWORK } from './chain.js';
 
 const PORT = Number(process.env['PORT'] ?? 8787);
@@ -93,6 +95,38 @@ function enqueue(res: ServerResponse, ip: string, kind: JobKind, run: (j: Job) =
   send(res, 202, { jobId: job.id, position: queue.length });
 }
 
+const WEB_ROOT = resolve('web');
+const TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.woff2': 'font/woff2',
+};
+
+async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
+  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  const file = normalize(join(WEB_ROOT, rel));
+  if (!file.startsWith(WEB_ROOT + sep)) return send(res, 404, { error: 'Not found' });
+  try {
+    const body = await readFile(file);
+    res.writeHead(200, {
+      'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
+      'cache-control': extname(file) === '.html' ? 'no-cache' : 'public, max-age=3600',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+    });
+    res.end(body);
+  } catch {
+    send(res, 404, { error: 'Not found' });
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
@@ -129,6 +163,13 @@ const server = createServer(async (req, res) => {
         return chain.disclose(discloseMatch[1], index);
       });
     }
+    const supplierMatch = url.pathname.match(/^\/api\/supplier\/lots\/([0-9a-f]{64})$/);
+    if (req.method === 'GET' && supplierMatch) {
+      if (!ready) return send(res, 503, { error: 'Service is starting' });
+      const lot = await chain.supplierLot(supplierMatch[1]);
+      return lot ? send(res, 200, lot) : send(res, 404, { error: 'No supplier data for this lot' });
+    }
+    if (req.method === 'GET' && !url.pathname.startsWith('/api/')) return serveStatic(url.pathname, res);
     send(res, 404, { error: 'Not found' });
   } catch (e) {
     logger.warn({ err: String(e) }, 'bad request');

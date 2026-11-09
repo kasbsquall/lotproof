@@ -184,6 +184,19 @@ export class LotproofChain {
     return tx;
   }
 
+  /**
+   * The supplier's own copy of a lot's raw values, for the "supplier view" of
+   * the demo. In production this never leaves the supplier's network; here the
+   * service is the supplier machine and the values are simulated.
+   */
+  async supplierLot(lotHex: string): Promise<{ id: string; valuesUm: number[] } | null> {
+    if (!this.state.lots.some((l) => l.id === lotHex)) return null;
+    const view = this.providers.privateStateProvider.forContract(this.state.contractAddress!);
+    const ps = (await view.get(PRIVATE_STATE_ID)) as LotproofPrivateState | null;
+    const lot = ps?.lots[lotHex];
+    return lot ? { id: lotHex, valuesUm: lot.values.map(Number) } : null;
+  }
+
   /** Public view: what any customer could read from the indexer, plus tx hashes. */
   async publicView() {
     const read = await this.providers.publicDataProvider.queryContractState(this.state.contractAddress!);
