@@ -1,0 +1,14 @@
+/node_modules
+/contract/managed
+
+/logs
+deployment.json
+/midnight-level-db
+/.midnight-expert
+.env.preview
+.env.preprod
+.env
+.env.*
+!.env.*.example
+*.log
+dist

@@ -1,0 +1,179 @@
+// This file is part of Lotproof.
+// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Lotproof: a supplier proves to its customer how many parts of a lot are
+// inside the drawing tolerance, without handing over the raw measurements.
+//
+// Flow:
+//   1. The supplier (admin) publishes a drawing spec: nominal, tolerance band
+//      and the customer's acceptance number (max out-of-tolerance parts).
+//   2. A registered measuring station commits the hash of the lot's raw
+//      measurements at measuring time. After this the values cannot change.
+//   3. Later, the supplier proves, against that commitment, how many parts are
+//      inside the band. Only the count and the verdict reach the ledger.
+//   4. If the customer disputes one part, the supplier can disclose that single
+//      value, proven to belong to the committed lot.
+//
+// Identities are hashes of witness secrets (never ownPublicKey()), domain
+// separated per role.
+
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+// Sample size per lot. Fixed because Compact vectors have a static length.
+export enum LotStatus { Committed, Accepted, Rejected }
+
+export struct Spec {
+    // All lengths in micrometres (um) to stay in unsigned integers.
+    nominal: Uint<32>;
+    lower: Uint<32>;
+    upper: Uint<32>;
+    maxDefects: Uint<8>;
+}
+
+export struct Lot {
+    specId: Bytes<32>;
+    station: Bytes<32>;
+    commitment: Bytes<32>;
+    status: LotStatus;
+    inTolerance: Uint<8>;
+    sampleSize: Uint<8>;
+}
+
+export ledger admin: Bytes<32>;
+export ledger stations: Set<Bytes<32>>;
+export ledger specs: Map<Bytes<32>, Spec>;
+export ledger lots: Map<Bytes<32>, Lot>;
+// lotId -> (part index -> disclosed value). Only parts the supplier chose to reveal.
+export ledger disclosed: Map<Bytes<32>, Map<Uint<8>, Uint<32>>>;
+export ledger provenLots: Counter;
+
+witness adminSecret(): Bytes<32>;
+witness stationSecret(): Bytes<32>;
+witness lotMeasurements(lotId: Bytes<32>): Vector<32, Uint<32>>;
+witness lotSalt(lotId: Bytes<32>): Bytes<32>;
+
+export pure circuit adminKey(sk: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "lotproof:admin:v1"), sk]);
+}
+
+export pure circuit stationKey(sk: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "lotproof:station:v1"), sk]);
+}
+
+export pure circuit lotCommitment(values: Vector<32, Uint<32>>, salt: Bytes<32>): Bytes<32> {
+    return persistentHash<[Vector<32, Uint<32>>, Bytes<32>]>([values, salt]);
+}
+
+export pure circuit countInTolerance(values: Vector<32, Uint<32>>, lower: Uint<32>, upper: Uint<32>): Uint<8> {
+    return fold((acc: Uint<8>, v: Uint<32>): Uint<8> =>
+        (v >= lower && v <= upper) ? (acc + 1) as Uint<8> : acc,
+        0 as Uint<8>, values);
+}
+
+// Vectors cannot be indexed with a runtime value, so walk the lot once and
+// keep the value whose position matches.
+export pure circuit pickPart(values: Vector<32, Uint<32>>, index: Uint<8>): Uint<32> {
+    const r = fold((acc: [Uint<8>, Uint<32>], v: Uint<32>): [Uint<8>, Uint<32>] =>
+        [(acc[0] + 1) as Uint<8>, acc[0] == index ? v : acc[1]],
+        [0 as Uint<8>, 0 as Uint<32>], values);
+    return r[1];
+}
+
+constructor() {
+    admin = disclose(adminKey(adminSecret()));
+}
+
+circuit assertAdmin(): [] {
+    assert(admin == disclose(adminKey(adminSecret())), "Only the supplier admin can do this");
+}
+
+export circuit registerStation(station: Bytes<32>): [] {
+    assertAdmin();
+    stations.insert(disclose(station));
+}
+
+export circuit publishSpec(specId: Bytes<32>, spec: Spec): [] {
+    assertAdmin();
+    const id = disclose(specId);
+    const s = disclose(spec);
+    assert(!specs.member(id), "Spec id already used");
+    assert(s.lower <= s.nominal && s.nominal <= s.upper, "Nominal must sit inside the band");
+    assert(s.maxDefects <= 32, "Acceptance number larger than the sample");
+    specs.insert(id, s);
+}
+
+// Called by the measuring station right after measuring. Values stay on the
+// station; only their salted hash is published.
+export circuit commitLot(lotId: Bytes<32>, specId: Bytes<32>): [] {
+    const st = disclose(stationKey(stationSecret()));
+    assert(stations.member(st), "Station not registered");
+    const id = disclose(lotId);
+    const sp = disclose(specId);
+    assert(specs.member(sp), "Unknown spec");
+    assert(!lots.member(id), "Lot already committed");
+    const c = disclose(lotCommitment(lotMeasurements(lotId), lotSalt(lotId)));
+    lots.insert(id, Lot {
+        specId: sp,
+        station: st,
+        commitment: c,
+        status: LotStatus.Committed,
+        inTolerance: 0,
+        sampleSize: 32
+    });
+}
+
+// The supplier proves the verdict. The circuit re-hashes the private values,
+// checks them against the station's commitment and counts them against the band.
+export circuit proveLot(lotId: Bytes<32>): [] {
+    assertAdmin();
+    const id = disclose(lotId);
+    assert(lots.member(id), "Unknown lot");
+    const lot = lots.lookup(id);
+    assert(lot.status == LotStatus.Committed, "Lot already proven");
+    const spec = specs.lookup(lot.specId);
+    const values = lotMeasurements(lotId);
+    assert(lotCommitment(values, lotSalt(lotId)) == lot.commitment,
+           "Measurements do not match the station commitment");
+    const ok = disclose(countInTolerance(values, spec.lower, spec.upper));
+    const accepted = (32 - ok) as Uint<8> <= spec.maxDefects;
+    lots.insert(id, Lot {
+        specId: lot.specId,
+        station: lot.station,
+        commitment: lot.commitment,
+        status: accepted ? LotStatus.Accepted : LotStatus.Rejected,
+        inTolerance: ok,
+        sampleSize: 32
+    });
+    provenLots.increment(1);
+}
+
+// Selective disclosure of one disputed part. The value is proven to be the
+// one inside the committed lot; the other 31 stay private.
+export circuit disclosePart(lotId: Bytes<32>, index: Uint<8>): [] {
+    assertAdmin();
+    const id = disclose(lotId);
+    const i = disclose(index);
+    assert(lots.member(id), "Unknown lot");
+    assert(i < 32, "Part index out of range");
+    const lot = lots.lookup(id);
+    const values = lotMeasurements(lotId);
+    assert(lotCommitment(values, lotSalt(lotId)) == lot.commitment,
+           "Measurements do not match the station commitment");
+    const v = disclose(pickPart(values, i));
+    if (!disclosed.member(id)) {
+        disclosed.insert(id, default<Map<Uint<8>, Uint<32>>>);
+    }
+    disclosed.lookup(id).insert(i, v);
+}

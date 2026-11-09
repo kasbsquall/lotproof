@@ -1,0 +1,52 @@
+{
+  "name": "lotproof",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "compile": "compact compile contract/lotproof.compact contract/managed/lotproof",
+    "compile:fast": "compact compile --skip-zk contract/lotproof.compact contract/managed/lotproof",
+    "typecheck": "tsc --noEmit -p .",
+    "test:sim": "vitest run src/test/lotproof.sim.test.ts",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' vitest run --exclude 'src/**/*.sim.test.ts'",
+    "test:local": "MIDNIGHT_NETWORK=local yarn test",
+    "test:preview": "MIDNIGHT_NETWORK=preview yarn test",
+    "env:up": "docker compose up -d --wait",
+    "env:down": "docker compose down",
+    "proof:up": "docker compose up -d --wait proof-server",
+    "wait:dust": "vite-node scripts/wait-for-dust.ts"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.0",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0",
+    "@midnight-ntwrk/midnight-js-network-id": "5.0.0-rc.5",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0",
+    "@midnight-ntwrk/midnight-js-protocol": "5.0.0",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0",
+    "@midnight-ntwrk/testkit-js": "5.0.0",
+    "@midnight-ntwrk/wallet-sdk": "2.0.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^13.0.0",
+    "rxjs": "^7.8.2",
+    "testcontainers": "^11.13.0",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.9",
+    "typescript": "^5.7.0",
+    "vite": "6.4.4",
+    "vite-node": "^6.0.0",
+    "vitest": "^4.1.11"
+  },
+  "resolutions": {
+    "effect": "3.22.4"
+  },
+  "packageManager": "yarn@1.22.22"
+}
