@@ -18,7 +18,8 @@
     "env:up": "docker compose up -d --wait",
     "env:down": "docker compose down",
     "proof:up": "docker compose up -d --wait proof-server",
-    "wait:dust": "vite-node scripts/wait-for-dust.ts"
+    "wait:dust": "vite-node scripts/wait-for-dust.ts",
+    "server": "vite-node server/index.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/midnight-js-contracts": "5.0.0",

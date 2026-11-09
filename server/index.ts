@@ -1,0 +1,155 @@
+// This file is part of Lotproof.
+// SPDX-License-Identifier: Apache-2.0
+// HTTP front of the demo service. One chain job runs at a time (one wallet),
+// a short queue absorbs bursts, and each IP can start a few jobs per hour.
+
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { LotproofChain, logger, NETWORK } from './chain.js';
+
+const PORT = Number(process.env['PORT'] ?? 8787);
+const HOST = process.env['HOST'] ?? '127.0.0.1';
+const MAX_QUEUE = 3;
+const JOBS_PER_IP_PER_HOUR = Number(process.env['JOBS_PER_IP_PER_HOUR'] ?? 6);
+const ALLOWED_ORIGIN = process.env['ALLOWED_ORIGIN'] ?? '*';
+
+type JobKind = 'measure' | 'tamper' | 'disclose';
+type Job = {
+  id: string;
+  kind: JobKind;
+  step: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  queuedAt: string;
+  result?: unknown;
+  error?: string;
+};
+
+mkdirSync('data', { recursive: true });
+const chain = new LotproofChain();
+const jobs = new Map<string, Job>();
+const queue: { job: Job; run: (j: Job) => Promise<unknown> }[] = [];
+const ipHits = new Map<string, number[]>();
+let running = false;
+let ready = false;
+let startError: string | undefined;
+
+async function pump(): Promise<void> {
+  if (running) return;
+  const next = queue.shift();
+  if (!next) return;
+  running = true;
+  next.job.status = 'running';
+  try {
+    next.job.result = await next.run(next.job);
+    next.job.status = 'done';
+    next.job.step = 'done';
+  } catch (e) {
+    next.job.status = 'failed';
+    next.job.error = 'The chain operation failed. Try again in a minute.';
+    logger.error({ err: String(e) }, `job ${next.job.id} failed`);
+  } finally {
+    running = false;
+    void pump();
+  }
+}
+
+function allow(ip: string): boolean {
+  const now = Date.now();
+  const recent = (ipHits.get(ip) ?? []).filter((t) => now - t < 3_600_000);
+  if (recent.length >= JOBS_PER_IP_PER_HOUR) return false;
+  ipHits.set(ip, [...recent, now]);
+  return true;
+}
+
+function send(res: ServerResponse, code: number, body: unknown): void {
+  res.writeHead(code, {
+    'content-type': 'application/json',
+    'access-control-allow-origin': ALLOWED_ORIGIN,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'cache-control': 'no-store',
+  });
+  res.end(JSON.stringify(body));
+}
+
+async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let raw = '';
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 2_000) throw new Error('Body too large');
+  }
+  return raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+}
+
+function enqueue(res: ServerResponse, ip: string, kind: JobKind, run: (j: Job) => Promise<unknown>): void {
+  if (!ready) return send(res, 503, { error: startError ? 'Service failed to start' : 'Service is starting' });
+  if (queue.length >= MAX_QUEUE) return send(res, 429, { error: 'Queue is full, try again shortly' });
+  if (!allow(ip)) return send(res, 429, { error: 'Hourly demo limit reached for this address' });
+  const job: Job = { id: randomUUID(), kind, step: 'queued', status: 'queued', queuedAt: new Date().toISOString() };
+  jobs.set(job.id, job);
+  queue.push({ job, run });
+  void pump();
+  send(res, 202, { jobId: job.id, position: queue.length });
+}
+
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
+  try {
+    if (req.method === 'OPTIONS') return send(res, 204, {});
+    if (req.method === 'GET' && url.pathname === '/api/health') {
+      return send(res, 200, { ready, network: NETWORK, contractAddress: chain.address ?? null, queue: queue.length, running });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/state') {
+      if (!ready) return send(res, 503, { error: 'Service is starting' });
+      return send(res, 200, await chain.publicView());
+    }
+    const jobMatch = url.pathname.match(/^\/api\/jobs\/([0-9a-f-]{36})$/);
+    if (req.method === 'GET' && jobMatch) {
+      const job = jobs.get(jobMatch[1]);
+      return job ? send(res, 200, job) : send(res, 404, { error: 'Unknown job' });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/demo/lots') {
+      const body = await readJson(req);
+      const defects = Number(body['defects'] ?? 0);
+      if (!Number.isInteger(defects) || defects < 0 || defects > 4) return send(res, 400, { error: 'defects must be 0 to 4' });
+      return enqueue(res, ip, 'measure', (j) => chain.measureAndProve(defects, (s) => (j.step = s)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/demo/tamper') {
+      return enqueue(res, ip, 'tamper', (j) => chain.tamperAttempt((s) => (j.step = s)));
+    }
+    const discloseMatch = url.pathname.match(/^\/api\/lots\/([0-9a-f]{64})\/disclose$/);
+    if (req.method === 'POST' && discloseMatch) {
+      const body = await readJson(req);
+      const index = Number(body['index']);
+      if (!Number.isInteger(index) || index < 0 || index > 31) return send(res, 400, { error: 'index must be 0 to 31' });
+      return enqueue(res, ip, 'disclose', (j) => {
+        j.step = 'proving';
+        return chain.disclose(discloseMatch[1], index);
+      });
+    }
+    send(res, 404, { error: 'Not found' });
+  } catch (e) {
+    logger.warn({ err: String(e) }, 'bad request');
+    send(res, 400, { error: 'Bad request' });
+  }
+});
+
+server.listen(PORT, HOST, () => logger.info(`Lotproof demo API on http://${HOST}:${PORT} (${NETWORK})`));
+
+chain
+  .start()
+  .then(() => (ready = true))
+  .catch((e) => {
+    startError = String(e);
+    logger.error({ err: startError }, 'chain start failed');
+  });
+
+const shutdown = async () => {
+  server.close();
+  await chain.stop();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

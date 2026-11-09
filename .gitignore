@@ -12,3 +12,4 @@ deployment.json
 !.env.*.example
 *.log
 dist
+/data

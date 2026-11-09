@@ -14,13 +14,17 @@ export function buildProviders(
     wallet: MidnightWalletProvider,
     zkConfigPath: string,
     config: NetworkConfig,
+    // Tests use a throwaway store; the demo server passes a stable name and a
+    // password from the environment so lots survive restarts.
+    storeName = `lotproof-test-${Date.now()}`,
+    storePassword = 'Lotproof-Test-Store-1!',
 ): LotproofProviders {
     const zkConfigProvider = new NodeZkConfigProvider<LotproofCircuits>(zkConfigPath);
 
     return {
         privateStateProvider: levelPrivateStateProvider({
-            privateStateStoreName: `lotproof-${Date.now()}`,
-            privateStoragePasswordProvider: () => 'Lotproof-Local-Store-1!',
+            privateStateStoreName: storeName,
+            privateStoragePasswordProvider: () => storePassword,
             accountId: wallet.getCoinPublicKey(),
         }),
         publicDataProvider: indexerPublicDataProvider(
