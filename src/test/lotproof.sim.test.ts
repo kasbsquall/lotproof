@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { LotStatus, pureCircuits, type Spec } from '../../contract/index.js';
 import { LotproofSimulator, bytes32, idFrom } from './lotproof.simulator.js';
 
-setNetworkId('undeployed');
 
 // Shaft diameter 12.000 mm +/- 0.050 mm, customer accepts at most 1 defect in 32.
 const SHAFT: Spec = { nominal: 12_000n, lower: 11_950n, upper: 12_050n, maxDefects: 1n };

@@ -1,0 +1,35 @@
+{
+  "network": "local",
+  "contractAddress": "697a5a4df00049897c45bd6377b0c8aa7d3e494276eff8a34abd841d6321aa07",
+  "transactions": [
+    {
+      "step": "deploy",
+      "txHash": "63ff82cd392eb63ff6686c6242879b0c110c29b30a6f276e9f3df0dc4c4c1d5b"
+    },
+    {
+      "step": "registerStation",
+      "txHash": "49ea22cb98769e357cafd8609625b4a5dae8dc23c3f3709417436a9903d21f75",
+      "blockHeight": 93
+    },
+    {
+      "step": "publishSpec",
+      "txHash": "b4c8df2ddf072b9ca3d65f02e43caf42b6d9e6aba370a58098c21c4d2a7f9a37",
+      "blockHeight": 97
+    },
+    {
+      "step": "commitLot",
+      "txHash": "b8f9509948252524acb7bd7da9862213a9fa0fc7d8fdd9e89422e80742907c6d",
+      "blockHeight": 100
+    },
+    {
+      "step": "proveLot",
+      "txHash": "1250e9178a8daaf74623be8cc99e7414941e0f5cd1b50f5148366fd3af20d18d",
+      "blockHeight": 104
+    },
+    {
+      "step": "commitLot (tamper case)",
+      "txHash": "429d1d70ba30da2b2809701483a58129c9ab1a29e9aff6020eb702ec4064deee",
+      "blockHeight": 108
+    }
+  ]
+}

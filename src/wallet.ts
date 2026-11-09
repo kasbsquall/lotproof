@@ -60,3 +60,23 @@ export async function syncWallet(
   logger.info('Syncing wallet...');
   return testkitSyncWallet(wallet, 1_000, timeout);
 }
+
+const LOCAL_DEV_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
+
+/**
+ * Local devnet uses its pre-funded genesis wallet. Remote networks read
+ * MIDNIGHT_<NETWORK>_SEED or MIDNIGHT_<NETWORK>_MNEMONIC from .env.<network>.
+ */
+export function resolveSecret(net: string): WalletSecret {
+  if (net === 'local') return { kind: 'seed', value: LOCAL_DEV_SEED };
+  const upper = net.toUpperCase();
+  const mnemonic = process.env[`MIDNIGHT_${upper}_MNEMONIC`]?.trim().replace(/\s+/g, ' ');
+  const seed = process.env[`MIDNIGHT_${upper}_SEED`]?.trim();
+  if (mnemonic && seed) throw new Error(`Set only one of MIDNIGHT_${upper}_MNEMONIC or MIDNIGHT_${upper}_SEED`);
+  if (mnemonic) return { kind: 'mnemonic', value: mnemonic };
+  if (seed) {
+    if (!/^[0-9a-fA-F]{64}$/.test(seed)) throw new Error(`MIDNIGHT_${upper}_SEED must be 64 hex characters`);
+    return { kind: 'seed', value: seed };
+  }
+  throw new Error(`Set MIDNIGHT_${upper}_SEED or MIDNIGHT_${upper}_MNEMONIC in .env.${net}`);
+}

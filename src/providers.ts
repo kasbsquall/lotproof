@@ -6,21 +6,21 @@ import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-pri
 import { type MidnightWalletProvider } from './wallet.js';
 import { type NetworkConfig } from './config.js';
 
-export type HelloWorldCircuits = 'storeMessage';
+export type LotproofCircuits = 'registerStation' | 'publishSpec' | 'commitLot' | 'proveLot' | 'disclosePart';
 
-export type HelloWorldProviders = MidnightProviders<any>;
+export type LotproofProviders = MidnightProviders<any>;
 
 export function buildProviders(
     wallet: MidnightWalletProvider,
     zkConfigPath: string,
     config: NetworkConfig,
-): HelloWorldProviders {
-    const zkConfigProvider = new NodeZkConfigProvider<HelloWorldCircuits>(zkConfigPath);
+): LotproofProviders {
+    const zkConfigProvider = new NodeZkConfigProvider<LotproofCircuits>(zkConfigPath);
 
     return {
         privateStateProvider: levelPrivateStateProvider({
-            privateStateStoreName: `hello-world-${Date.now()}`,
-            privateStoragePasswordProvider: () => 'Hello-World-Test-Password',
+            privateStateStoreName: `lotproof-${Date.now()}`,
+            privateStoragePasswordProvider: () => 'Lotproof-Local-Store-1!',
             accountId: wallet.getCoinPublicKey(),
         }),
         publicDataProvider: indexerPublicDataProvider(
