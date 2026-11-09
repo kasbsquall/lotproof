@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    env:
+      COMPACT_TOOLCHAIN: 0.36.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - name: Install the Compact toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Pin the compiler to the Preview network version
+        run: |
+          compact update "$COMPACT_TOOLCHAIN"
+          compact compile --version
+      - run: yarn install --frozen-lockfile
+      - name: Compile the contract (circuits and keys)
+        run: yarn compile
+      - run: yarn typecheck
+      - name: Simulator tests
+        run: yarn test:sim
