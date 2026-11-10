@@ -1,5 +1,7 @@
 # Lotproof
 
+[![ci](https://github.com/kasbsquall/lotproof/actions/workflows/ci.yml/badge.svg)](https://github.com/kasbsquall/lotproof/actions/workflows/ci.yml)
+
 **A parts supplier proves a lot is inside the drawing tolerance without handing over its measurements.**
 
 Customers ask suppliers for the raw measurements of every lot before they accept it. Those numbers describe the supplier's process, and suppliers know they end up in the next price negotiation ("CMs are leery of sharing information that could lead to demands for more price cuts", Matt Littlefield, LNS Research, quoted by SAP). Lotproof gives both sides a third option between "send me everything" and "trust my certificate":
