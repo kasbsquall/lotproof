@@ -48,6 +48,7 @@ i.ph-light{font-size:16px;line-height:1;vertical-align:-2px}
 .ctx span{color:var(--tinta-3)}
 .top .spacer{flex:1}
 .net{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--tinta-2);padding:4px 10px;border:1px solid var(--linea);border-radius:999px;white-space:nowrap}
+.net .short{display:none}
 .net .dot{width:7px;height:7px;border-radius:50%;background:var(--tinta-3)}
 .net.ok .dot{background:var(--dentro);animation:breathe 3.4s ease-in-out infinite}
 .net.wait .dot{background:var(--pend);animation:breathe 1.8s ease-in-out infinite}
@@ -296,7 +297,9 @@ dialog.drawer[open]{animation:drawer 240ms cubic-bezier(0.32,0.72,0,1)}
 @media (max-width: 720px){
   .top{padding:0 12px;gap:6px}
   .top .sep,.ctx{display:none}
-  .net .lbl,#consoleBtn .lbl{display:none}
+  #consoleBtn .lbl{display:none}
+  .net .full{display:none}
+  .net .short{display:inline}
   #consoleBtn{padding:0 8px}
   main{padding:16px 16px 56px}
   h1{font-size:25px}

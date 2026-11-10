@@ -109,7 +109,9 @@ function toast(text, { icon = 'ph-info', retry = null, ms = 2600 } = {}) {
 function setNet(kind, network) {
   const n = $('#net');
   n.className = `net ${kind}`;
-  $('.lbl', n).textContent = kind === 'ok' ? netName(network) : kind === 'wait' ? 'Service starting' : 'Service unreachable';
+  const full = kind === 'ok' ? netName(network) : kind === 'wait' ? 'Service starting' : 'Service unreachable';
+  const short = kind === 'ok' ? (network === 'preview' ? 'Preview' : network === 'local' ? 'Local' : full) : kind === 'wait' ? 'Starting' : 'Offline';
+  $('.lbl', n).innerHTML = `<span class="full">${esc(full)}</span><span class="short">${esc(short)}</span>`;
   n.title = kind === 'ok' ? `Reading the contract on ${netName(network)}` : '';
 }
 
@@ -343,8 +345,6 @@ function renderChart(l, sp) {
   for (const [um, strong] of [[top, false], [sp.upperUm, true], [sp.nominalUm, true], [sp.lowerUm, true], [bot, false]]) {
     s += `<text class="axis ${strong ? 'strong' : ''}" x="${X0 - 10}" y="${y(um) + 4}" text-anchor="end">${mm(Math.round(um))}</text>`;
   }
-  s += `<text class="axis" x="${X1}" y="${yU - 6}" text-anchor="end">upper ${mm(sp.upperUm)} mm</text>`;
-  s += `<text class="axis" x="${X1}" y="${yL + 15}" text-anchor="end">lower ${mm(sp.lowerUm)} mm</text>`;
   s += `<line class="nom" x1="${X0}" x2="${X1}" y1="${yN}" y2="${yN}"/>`;
   s += `<line class="lim" pathLength="1" x1="${X0}" x2="${X1}" y1="${yU}" y2="${yU}"/>`;
   s += `<line class="lim" pathLength="1" x1="${X0}" x2="${X1}" y1="${yL}" y2="${yL}"/>`;
@@ -372,6 +372,7 @@ function renderChart(l, sp) {
   const animate = [];
   const seen = S.shownDisclosed.get(l.id) ?? new Set();
   let outSlot = outN;
+  const callouts = [];
   for (const d of disc) {
     const isIn = inBand(sp, d.valueUm);
     const cx = xIdx(d.index), cy = y(d.valueUm);
@@ -388,10 +389,17 @@ function renderChart(l, sp) {
     s += `<line class="lead" x1="${cx}" x2="${cx}" y1="${cy}" y2="${yN}" stroke="var(--${isIn ? 'dentro' : 'fuera'})"/>`;
     s += `<circle class="ring ${k}" cx="${cx}" cy="${cy}" r="${narrow ? 7 : 10}"/>`;
     s += `<circle class="dsc-${k}" cx="${cx}" cy="${cy}" r="${r + 0.6}"/>`;
+    callouts.push({ x: bx, y: by, w, h: 22 });
     s += `<g class="callout"><rect x="${bx}" y="${by}" width="${w}" height="22" rx="4"/><text x="${bx + 8}" y="${by + 15}">${esc(lbl)}</text></g>`;
     s += `<text class="axis strong" x="${cx}" y="${H - 6}" text-anchor="middle">#${d.index + 1}</text>`;
     s += '</g>';
     if (!seen.has(d.index)) animate.push(d.index);
+  }
+  // Band labels sit at the right edge unless a disclosed part's callout covers them.
+  for (const [txt, ly] of [[`upper ${mm(sp.upperUm)} mm`, yU - 6], [`lower ${mm(sp.lowerUm)} mm`, yL + 15]]) {
+    const lw = txt.length * 6.6;
+    const hit = callouts.some((c) => c.x < X1 && c.x + c.w > X1 - lw && c.y < ly + 3 && c.y + c.h > ly - 11);
+    s += hit ? `<text class="axis" x="${X0 + 6}" y="${ly}">${txt}</text>` : `<text class="axis" x="${X1}" y="${ly}" text-anchor="end">${txt}</text>`;
   }
   if (!disc.length) s += `<text class="axis cap" x="${X0}" y="${H - 6}">${proven(l) ? 'Parts are not placed by position: the proof gives a count.' : ''}</text>`;
   s += '</svg>';
@@ -716,3 +724,10 @@ dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
 
 /* ---------- boot: skeleton until the contract answers, never zeros ---------- */
 loadState();
+
+// A lot can also be opened by editing the #lot= part of the address.
+window.addEventListener('hashchange', () => {
+  const label = new URLSearchParams(location.hash.slice(1)).get('lot');
+  const lot = S.state?.lots.find((l) => l.label === label);
+  if (lot && lot.id !== S.sel) { S.sel = lot.id; renderAll(); }
+});
