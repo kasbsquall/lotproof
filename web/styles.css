@@ -216,6 +216,10 @@ h1{margin:6px 0 0;font-size:30px;line-height:1.1;font-weight:650;letter-spacing:
 .tbl .dim{color:var(--tinta-3)}
 .tbl.flash tbody tr td{animation:flash 900ms var(--ease) both;animation-delay:calc(var(--i,0) * 60ms)}
 .hash{display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+.xlink{color:inherit;text-decoration:none;display:inline-flex;gap:3px;align-items:center;border-radius:3px;transition:color 150ms var(--ease)}
+.xlink i{font-size:12px;color:var(--tinta-3)}
+.xlink:hover{color:var(--dentro-osc,var(--tinta));text-decoration:underline;text-underline-offset:2px}
+.xlink:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
 .copy{border:0;background:none;cursor:pointer;color:var(--tinta-3);padding:3px;border-radius:4px;display:inline-grid;place-items:center;transition:color 150ms var(--ease),transform 120ms var(--ease)}
 .copy:hover{color:var(--tinta)}
 .copy:active{transform:scale(.92)}

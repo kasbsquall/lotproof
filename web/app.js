@@ -446,10 +446,23 @@ addEventListener('resize', () => {
 });
 
 /* ---------- proof trail ---------- */
+// Public explorers, checked by hand on 10 Nov 2026 with this contract's transactions.
+const EXPLORERS = {
+  preview: {
+    name: '1AM Explorer',
+    tx: (h) => `https://explorer.1am.xyz/tx/${h}?network=preview`,
+    contract: (a) => `https://explorer.1am.xyz/contract/${a}?network=preview`,
+  },
+};
+const explorer = () => EXPLORERS[S.state?.network];
+function hashText(h, kind) {
+  const ex = explorer();
+  if (!ex) return `<span class="mono" title="${esc(h)}">${esc(short(h))}</span>`;
+  return `<a class="mono xlink" href="${esc(ex[kind](h))}" target="_blank" rel="noopener" title="Open in ${esc(ex.name)}: ${esc(h)}">${esc(short(h))}<i class="ph-light ph-arrow-square-out" aria-hidden="true"></i></a>`;
+}
 function hashCell(h) {
   if (!h) return '<span class="dim">no transaction</span>';
-  // Explorer URL format for Preview could not be verified, so hashes are copy-only.
-  return `<span class="hash"><span class="mono" title="${esc(h)}">${esc(short(h))}</span><button class="copy" type="button" aria-label="Copy transaction hash" data-copy="${esc(h)}"><i class="ph-light ph-copy"></i></button></span>`;
+  return `<span class="hash">${hashText(h, 'tx')}<button class="copy" type="button" aria-label="Copy transaction hash" data-copy="${esc(h)}"><i class="ph-light ph-copy"></i></button></span>`;
 }
 function renderTrail(l, sp) {
   const rows = [];
@@ -481,8 +494,8 @@ function renderTrail(l, sp) {
 function renderContract() {
   const { contractAddress: a, network, setupTxs } = S.state;
   const setup = (setupTxs || []).map((t) => `<span>${esc(t.step)}</span><span class="num">${t.blockHeight ? `block ${t.blockHeight}` : 'block not reported'}</span><span class="num">${esc(fmtTime(t.at))}</span>${hashCell(t.txHash)}`).join('');
-  $('#contract').innerHTML = `<span class="it"><i class="ph-light ph-file-code"></i>Contract <span class="mono" title="${esc(a)}">${esc(short(a))}</span><button class="copy" type="button" aria-label="Copy contract address" data-copy="${esc(a)}"><i class="ph-light ph-copy"></i></button></span>`
-    + `<span class="it"><i class="ph-light ph-globe-simple"></i>${esc(netName(network))}${network === 'local' ? ', no public explorer' : ''}</span>`
+  $('#contract').innerHTML = `<span class="it"><i class="ph-light ph-file-code"></i>Contract ${hashText(a, 'contract')}<button class="copy" type="button" aria-label="Copy contract address" data-copy="${esc(a)}"><i class="ph-light ph-copy"></i></button></span>`
+    + `<span class="it"><i class="ph-light ph-globe-simple"></i>${esc(netName(network))}${network === 'local' ? ', no public explorer' : explorer() ? `, verify in ${esc(explorer().name)}` : ''}</span>`
     + `<span class="it num"><i class="ph-light ph-seal-check"></i>${plural(S.state.provenLots, 'lot', 'lots')} proven on this contract</span>`
     + (setup ? `<details><summary><i class="ph-light ph-caret-right car"></i>Contract setup, ${plural(setupTxs.length, 'transaction', 'transactions')}</summary><div class="setup">${setup}</div></details>` : '');
 }

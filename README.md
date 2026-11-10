@@ -13,7 +13,7 @@ Customers ask suppliers for the raw measurements of every lot before they accept
 | --- | --- |
 | Live demo | https://lotproof.154-53-53-223.sslip.io (Midnight Preview) |
 | Video | pending |
-| Contract on Preview | `e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49` |
+| Contract on Preview | [`e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49`](https://explorer.1am.xyz/contract/e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49?network=preview) (1AM Explorer) |
 | Contract on local devnet | deployed and exercised end to end, see [How to verify](#how-to-verify-in-5-minutes) |
 | Tests | 19 simulator tests (10 of them inputs the contract must refuse) and 4 end-to-end tests with real proofs |
 
