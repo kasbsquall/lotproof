@@ -341,7 +341,7 @@ function renderChart(l, sp) {
   s += `<defs><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="oklch(88% .01 250)" stroke-width="1"/></pattern></defs>`;
   s += `<rect x="${X0}" y="${Y_T}" width="${X1 - X0}" height="${yU - Y_T}" fill="url(#hatch)" opacity=".55"/>`;
   s += `<rect x="${X0}" y="${yL}" width="${X1 - X0}" height="${Y_B - yL}" fill="url(#hatch)" opacity=".55"/>`;
-  s += `<rect class="band-fill" x="${X0}" y="${yU}" width="${X1 - X0}" height="${yL - yU}" fill="var(--banda)"/>`;
+  s += `<rect class="band-fill${l.status === 'refused' ? ' dim' : ''}" x="${X0}" y="${yU}" width="${X1 - X0}" height="${yL - yU}" fill="var(--banda)"/>`;
   for (const [um, strong] of [[top, false], [sp.upperUm, true], [sp.nominalUm, true], [sp.lowerUm, true], [bot, false]]) {
     s += `<text class="axis ${strong ? 'strong' : ''}" x="${X0 - 10}" y="${y(um) + 4}" text-anchor="end">${mm(Math.round(um))}</text>`;
   }
@@ -352,12 +352,14 @@ function renderChart(l, sp) {
   s += `<text class="axis" x="${X0 - 10}" y="${OUT_Y + 4}" text-anchor="end">out</text>`;
 
   // Undisclosed marks: identical, evenly spaced on the nominal line. No index, no height.
-  const flat = proven(l) ? l.inTolerance - discIn : (l.status === 'measuring' ? 0 : n);
+  // A refused proof recorded no count, so nothing is drawn inside the band.
+  const flat = proven(l) ? l.inTolerance - discIn : (l.status === 'measuring' || l.status === 'refused' ? 0 : n);
   const cls = proven(l) ? 'in' : l.status === 'refused' ? 'refused' : 'hollow';
   const rowX = (j) => X0 + ((j + 0.5) * (X1 - X0)) / Math.max(flat, 1);
   s += `<g class="${l.status === 'committed' ? 'pending-row' : ''}">`;
   for (let j = 0; j < flat; j++) s += `<g class="mk mkin" style="--i:${Math.min(j, 7)}"><circle class="${cls}" cx="${rowX(j).toFixed(1)}" cy="${yN}" r="${r}"/></g>`;
   s += '</g>';
+  if (l.status === 'refused') s += `<text class="axis cap" x="${(X0 + X1) / 2}" y="${yN - 12}" text-anchor="middle">No marks: the contract refused the proof and recorded no count</text>`;
 
   // Out-of-band marks: a count only, stacked apart, no position.
   const outN = proven(l) ? Math.max(0, outOf(l) - discOut) : 0;
@@ -514,8 +516,28 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-$('#verifyBtn').onclick = () => {
+// Re-reads the lot from the contract state on the indexer (the service queries
+// it on every /api/state call), then points to the transactions.
+$('#verifyBtn').onclick = async () => {
   play('click');
+  const b = $('#verifyBtn');
+  b.disabled = true;
+  try {
+    const st = await api('/api/state');
+    S.state = st;
+    const lot = st.lots.find((l) => l.id === S.sel);
+    const at = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const proof = lot && txOf(lot, 'proveLot')[0];
+    const what = !lot ? 'no lot selected'
+      : proven(lot) ? `${lot.inTolerance} of ${lot.sampleSize} inside, ${lot.status}${proof ? `, proof at block ${proof.blockHeight}` : ''}`
+      : lot.status === 'refused' ? 'no count recorded, the proof was refused' : 'no count recorded yet';
+    renderAll();
+    toast(`Read from contract ${short(st.contractAddress)} on ${netName(st.network)} at ${at}: ${what}.`, { icon: 'ph-seal-check', ms: 6000 });
+  } catch {
+    toast('Could not reach the contract state. Try again in a moment.', { icon: 'ph-warning' });
+  } finally {
+    b.disabled = false;
+  }
   const p = $('#proofs');
   p.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   $('#proofsH').focus({ preventScroll: true });

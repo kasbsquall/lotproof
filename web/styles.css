@@ -148,6 +148,7 @@ h1{margin:6px 0 0;font-size:30px;line-height:1.1;font-weight:650;letter-spacing:
 .lane{stroke:var(--linea-2)}
 .mk circle.in{fill:var(--dentro)}
 .mk circle.out{fill:var(--fuera)}
+.band-fill.dim{opacity:.35}
 .mk circle.hollow{fill:var(--hoja);stroke:var(--tinta-3);stroke-width:1.2}
 .mk circle.refused{fill:var(--hoja);stroke:var(--fuera);stroke-width:1.2}
 .mk circle.dsc-in{fill:var(--dentro-osc)}

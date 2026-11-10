@@ -4,21 +4,26 @@
 
 **A parts supplier proves a lot is inside the drawing tolerance without handing over its measurements.**
 
-Customers ask suppliers for the raw measurements of every lot before they accept it. Those numbers describe the supplier's process, and suppliers know they end up in the next price negotiation ("CMs are leery of sharing information that could lead to demands for more price cuts", Matt Littlefield, LNS Research, quoted by SAP). Lotproof gives both sides a third option between "send me everything" and "trust my certificate":
+Customers ask suppliers for the raw measurements of every lot before they accept it. Those numbers describe the supplier's process, and suppliers know they end up in the next price negotiation ("[Contract manufacturers] are leery of sharing information that could lead to demands for more price cuts", Matt Littlefield, LNS Research, quoted by SAP). Lotproof gives both sides a third option between "send me everything" and "trust my certificate".
 
-1. The measuring station (a registered CMM) publishes the salted hash of the lot's 32 measurements on Midnight **at measuring time**. From then on the values cannot change.
-2. When the customer asks, the supplier publishes a zero-knowledge proof of **how many parts sit inside the band**, checked against that hash.
-3. The customer sees the count, the verdict under its own acceptance number and the transactions. Never the numbers.
+**In plain words.** A *lot* is a batch of parts made together. The customer's drawing sets a *tolerance band* (the range every part must fall in) and an *acceptance number* (how many parts may fall outside before the lot is rejected). The parts are measured on a *CMM*, a coordinate measuring machine.
+
+**Example, live on Midnight Preview.** The drawing says a diameter of 12.000 mm ± 0.050, and the lot is accepted if at most 1 part of 32 falls outside. Lot LOT-261110-002 was measured, and the customer saw **"30 of 32 inside, rejected"** ([proof transaction](https://explorer.1am.xyz/tx/d5fbf036da990bff58f42b96b638bb63fffdedc1b933f249c6e42c2e222f151d?network=preview)) without seeing a single diameter.
+
+How it works:
+
+1. At measuring time, the measuring station publishes a sealed fingerprint of the lot's 32 measurements on Midnight (a salted hash, the *commitment*). Nobody can read the values from it, and from then on they cannot change.
+2. When the customer asks, the supplier publishes a zero-knowledge proof of **how many parts sit inside the band**, checked against that fingerprint.
+3. The customer sees the count, the verdict under its acceptance number and the transactions. Never the measurements.
 4. If one part is disputed, the supplier discloses that single value, proven to belong to the committed lot. The other 31 stay private.
 
 | | |
 | --- | --- |
 | Live demo | https://lotproof.154-53-53-223.sslip.io (Midnight Preview) |
 | Judges' guide | [JUDGES.md](JUDGES.md): three-minute walkthrough, where each claim is enforced, on-chain links |
-| Video | pending |
 | Contract on Preview | [`e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49`](https://explorer.1am.xyz/contract/e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49?network=preview) (1AM Explorer) |
 | Contract on local devnet | deployed and exercised end to end, see [How to verify](#how-to-verify-in-5-minutes) |
-| Tests | 19 simulator tests (10 of them inputs the contract must refuse) and 4 end-to-end tests with real proofs |
+| Tests | 19 simulator tests, 10 of them inputs the contract must refuse ([`src/test/lotproof.sim.test.ts`](src/test/lotproof.sim.test.ts)), and 4 end-to-end tests with real proofs ([`src/test/lotproof.test.ts`](src/test/lotproof.test.ts)); simulator tests run in CI on every push |
 
 ## What is public and what stays private
 
@@ -105,7 +110,7 @@ MIDNIGHT_NETWORK=local yarn server     # http://127.0.0.1:8787
 Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repository is new in this wave.
 
 - Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views, deployment on Preview with a public demo.
-- Pending: video and deck.
+- Next: narrated video and deck.
 
 The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 65 s on Preview.
 
