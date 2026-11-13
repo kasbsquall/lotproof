@@ -23,6 +23,7 @@ How it works:
 | | |
 | --- | --- |
 | Live demo | https://lotproof.avanc3.pe (Midnight Preview, no wallet needed) |
+| Video | [youtu.be/B-Apg1kcr3k](https://youtu.be/B-Apg1kcr3k): 2:23, narrated walkthrough of the live lots on Preview |
 | Deck | [docs/lotproof-deck.pdf](docs/lotproof-deck.pdf): 10 slides, problem, mechanism, what is public, who pays |
 | Judges' guide | [JUDGES.md](JUDGES.md): three-minute walkthrough, where each claim is enforced, on-chain links |
 | Contract on Preview | [`8ae9c803faa306226eb3203b57f4b48d6f75b797a1aadf02c025b66dfcad9128`](https://explorer.1am.xyz/contract/8ae9c803faa306226eb3203b57f4b48d6f75b797a1aadf02c025b66dfcad9128?network=preview) (1AM Explorer) |
@@ -152,7 +153,7 @@ MIDNIGHT_NETWORK=local yarn server     # http://127.0.0.1:8787
 
 Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repository is new in this wave.
 
-- Done: contract with customer audits, simulator tests, end-to-end tests on a local devnet and on Preview, demo service, web views, public demo on Preview, deck.
+- Done: contract with customer audits, simulator tests, end-to-end tests on a local devnet and on Preview, demo service, web views, public demo on Preview, deck, narrated video.
 - Next: a real lot from the manufacturer above, and the station adapter.
 
 The public demo at lotproof.avanc3.pe runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 70 to 80 s on Preview.
