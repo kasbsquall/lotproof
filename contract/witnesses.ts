@@ -13,6 +13,9 @@ export type PrivateLot = {
 
 export type LotproofPrivateState = {
   adminSecret: Uint8Array;
+  // In a real deployment each role keeps its own secret on its own machine.
+  // The demo service plays all three roles, so one private state holds them.
+  customerSecret: Uint8Array;
   stationSecret: Uint8Array;
   lots: Record<string, PrivateLot>;
 };
@@ -21,8 +24,9 @@ export const toHex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
 
 export const createLotproofPrivateState = (
   adminSecret: Uint8Array,
+  customerSecret: Uint8Array,
   stationSecret: Uint8Array,
-): LotproofPrivateState => ({ adminSecret, stationSecret, lots: {} });
+): LotproofPrivateState => ({ adminSecret, customerSecret, stationSecret, lots: {} });
 
 /** Adds a lot to private state without mutating the previous object. */
 export const withLot = (
@@ -50,6 +54,7 @@ const requireLot = (state: LotproofPrivateState, lotId: Uint8Array): PrivateLot 
 
 export const witnesses: Witnesses<LotproofPrivateState> = {
   adminSecret: ({ privateState }) => [privateState, requireSecret(privateState.adminSecret, 'adminSecret')],
+  customerSecret: ({ privateState }) => [privateState, requireSecret(privateState.customerSecret, 'customerSecret')],
   stationSecret: ({ privateState }) => [privateState, requireSecret(privateState.stationSecret, 'stationSecret')],
   lotMeasurements: ({ privateState }, lotId) => [privateState, requireLot(privateState, lotId).values],
   lotSalt: ({ privateState }, lotId) => [privateState, requireLot(privateState, lotId).salt],

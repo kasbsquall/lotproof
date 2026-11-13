@@ -15,15 +15,23 @@
 // Lotproof: a supplier proves to its customer how many parts of a lot are
 // inside the drawing tolerance, without handing over the raw measurements.
 //
+// One contract per supplier-customer relationship. Two roles hold keys:
+//   - the customer approves measuring stations and publishes the drawing spec
+//     (tolerance band and its own acceptance number);
+//   - the supplier proves lots and, if a part is disputed, discloses it.
+//
 // Flow:
-//   1. The supplier (admin) publishes a drawing spec: nominal, tolerance band
-//      and the customer's acceptance number (max out-of-tolerance parts).
-//   2. A registered measuring station commits the hash of the lot's raw
-//      measurements at measuring time. After this the values cannot change.
+//   1. The customer approves a measuring station and publishes a spec.
+//   2. The station commits the lot's raw measurements at measuring time. The
+//      commitment binds the lot id and the spec id, so it cannot be reused for
+//      another lot. After this the values cannot change.
 //   3. Later, the supplier proves, against that commitment, how many parts are
 //      inside the band. Only the count and the verdict reach the ledger.
 //   4. If the customer disputes one part, the supplier can disclose that single
 //      value, proven to belong to the committed lot.
+//
+// Lot and spec ids are opaque 32-byte values. The demo derives them off-chain
+// with a keyed hash, so labels such as drawing numbers never reach the ledger.
 //
 // Identities are hashes of witness secrets (never ownPublicKey()), domain
 // separated per role.
@@ -31,7 +39,6 @@
 pragma language_version 0.28;
 import CompactStandardLibrary;
 
-// Sample size per lot. Fixed because Compact vectors have a static length.
 export enum LotStatus { Committed, Accepted, Rejected }
 
 export struct Spec {
@@ -52,14 +59,18 @@ export struct Lot {
 }
 
 export ledger admin: Bytes<32>;
+export ledger customer: Bytes<32>;
 export ledger stations: Set<Bytes<32>>;
 export ledger specs: Map<Bytes<32>, Spec>;
 export ledger lots: Map<Bytes<32>, Lot>;
 // lotId -> (part index -> disclosed value). Only parts the supplier chose to reveal.
 export ledger disclosed: Map<Bytes<32>, Map<Uint<8>, Uint<32>>>;
+// committedLots - provenLots = lots measured but not yet proven, visible to the customer.
+export ledger committedLots: Counter;
 export ledger provenLots: Counter;
 
 witness adminSecret(): Bytes<32>;
+witness customerSecret(): Bytes<32>;
 witness stationSecret(): Bytes<32>;
 witness lotMeasurements(lotId: Bytes<32>): Vector<32, Uint<32>>;
 witness lotSalt(lotId: Bytes<32>): Bytes<32>;
@@ -68,12 +79,20 @@ export pure circuit adminKey(sk: Bytes<32>): Bytes<32> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "lotproof:admin:v1"), sk]);
 }
 
+export pure circuit customerKey(sk: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([pad(32, "lotproof:customer:v1"), sk]);
+}
+
 export pure circuit stationKey(sk: Bytes<32>): Bytes<32> {
     return persistentHash<Vector<2, Bytes<32>>>([pad(32, "lotproof:station:v1"), sk]);
 }
 
-export pure circuit lotCommitment(values: Vector<32, Uint<32>>, salt: Bytes<32>): Bytes<32> {
-    return persistentHash<[Vector<32, Uint<32>>, Bytes<32>]>([values, salt]);
+// Hiding commitment to one lot. The salt is the commitment randomness; the lot
+// and spec ids are inside, so a commitment only ever opens for its own lot.
+export pure circuit lotCommitment(lotId: Bytes<32>, specId: Bytes<32>,
+                                  values: Vector<32, Uint<32>>, salt: Bytes<32>): Bytes<32> {
+    return persistentCommit<[Bytes<32>, Bytes<32>, Bytes<32>, Vector<32, Uint<32>>]>(
+        [pad(32, "lotproof:lot:v2"), lotId, specId, values], salt);
 }
 
 export pure circuit countInTolerance(values: Vector<32, Uint<32>>, lower: Uint<32>, upper: Uint<32>): Uint<8> {
@@ -91,21 +110,36 @@ export pure circuit pickPart(values: Vector<32, Uint<32>>, index: Uint<8>): Uint
     return r[1];
 }
 
-constructor() {
+// The supplier deploys; the customer's public key is fixed at deployment.
+constructor(customerPk: Bytes<32>) {
     admin = disclose(adminKey(adminSecret()));
+    customer = disclose(customerPk);
 }
 
 circuit assertAdmin(): [] {
     assert(admin == disclose(adminKey(adminSecret())), "Only the supplier admin can do this");
 }
 
+circuit assertCustomer(): [] {
+    assert(customer == disclose(customerKey(customerSecret())), "Only the customer can do this");
+}
+
 export circuit registerStation(station: Bytes<32>): [] {
-    assertAdmin();
-    stations.insert(disclose(station));
+    assertCustomer();
+    const st = disclose(station);
+    assert(!stations.member(st), "Station already approved");
+    stations.insert(st);
+}
+
+export circuit revokeStation(station: Bytes<32>): [] {
+    assertCustomer();
+    const st = disclose(station);
+    assert(stations.member(st), "Station not registered");
+    stations.remove(st);
 }
 
 export circuit publishSpec(specId: Bytes<32>, spec: Spec): [] {
-    assertAdmin();
+    assertCustomer();
     const id = disclose(specId);
     const s = disclose(spec);
     assert(!specs.member(id), "Spec id already used");
@@ -115,7 +149,7 @@ export circuit publishSpec(specId: Bytes<32>, spec: Spec): [] {
 }
 
 // Called by the measuring station right after measuring. Values stay on the
-// station; only their salted hash is published.
+// station; only the commitment is published.
 export circuit commitLot(lotId: Bytes<32>, specId: Bytes<32>): [] {
     const st = disclose(stationKey(stationSecret()));
     assert(stations.member(st), "Station not registered");
@@ -123,7 +157,7 @@ export circuit commitLot(lotId: Bytes<32>, specId: Bytes<32>): [] {
     const sp = disclose(specId);
     assert(specs.member(sp), "Unknown spec");
     assert(!lots.member(id), "Lot already committed");
-    const c = disclose(lotCommitment(lotMeasurements(lotId), lotSalt(lotId)));
+    const c = disclose(lotCommitment(lotId, specId, lotMeasurements(lotId), lotSalt(lotId)));
     lots.insert(id, Lot {
         specId: sp,
         station: st,
@@ -132,10 +166,12 @@ export circuit commitLot(lotId: Bytes<32>, specId: Bytes<32>): [] {
         inTolerance: 0,
         sampleSize: 32
     });
+    committedLots.increment(1);
 }
 
-// The supplier proves the verdict. The circuit re-hashes the private values,
-// checks them against the station's commitment and counts them against the band.
+// The supplier proves the verdict. The circuit recomputes the commitment from
+// the private values, checks it against the station's and counts the values
+// against the band.
 export circuit proveLot(lotId: Bytes<32>): [] {
     assertAdmin();
     const id = disclose(lotId);
@@ -144,7 +180,7 @@ export circuit proveLot(lotId: Bytes<32>): [] {
     assert(lot.status == LotStatus.Committed, "Lot already proven");
     const spec = specs.lookup(lot.specId);
     const values = lotMeasurements(lotId);
-    assert(lotCommitment(values, lotSalt(lotId)) == lot.commitment,
+    assert(lotCommitment(lotId, lot.specId, values, lotSalt(lotId)) == lot.commitment,
            "Measurements do not match the station commitment");
     const ok = disclose(countInTolerance(values, spec.lower, spec.upper));
     const accepted = (32 - ok) as Uint<8> <= spec.maxDefects;
@@ -169,11 +205,12 @@ export circuit disclosePart(lotId: Bytes<32>, index: Uint<8>): [] {
     assert(i < 32, "Part index out of range");
     const lot = lots.lookup(id);
     const values = lotMeasurements(lotId);
-    assert(lotCommitment(values, lotSalt(lotId)) == lot.commitment,
+    assert(lotCommitment(lotId, lot.specId, values, lotSalt(lotId)) == lot.commitment,
            "Measurements do not match the station commitment");
     const v = disclose(pickPart(values, i));
     if (!disclosed.member(id)) {
         disclosed.insert(id, default<Map<Uint<8>, Uint<32>>>);
     }
+    assert(!disclosed.lookup(id).member(i), "Part already disclosed");
     disclosed.lookup(id).insert(i, v);
 }

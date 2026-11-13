@@ -8,11 +8,11 @@ Customers ask suppliers for the raw measurements of every lot before they accept
 
 **In plain words.** A *lot* is a batch of parts made together. The customer's drawing sets a *tolerance band* (the range every part must fall in) and an *acceptance number* (how many parts may fall outside before the lot is rejected). The parts are measured on a *CMM*, a coordinate measuring machine.
 
-**Example, live on Midnight Preview.** The drawing says a diameter of 12.000 mm ± 0.050, and the lot is accepted if at most 1 part of 32 falls outside. Lot LOT-261110-002 was measured, and the customer saw **"30 of 32 inside, rejected"** ([proof transaction](https://explorer.1am.xyz/tx/d5fbf036da990bff58f42b96b638bb63fffdedc1b933f249c6e42c2e222f151d?network=preview)) without seeing a single diameter.
+**Example, live on Midnight Preview.** The drawing says a diameter of 12.000 mm ± 0.050, and the lot is accepted if at most 1 part of 32 falls outside. Lot LOT-261113-002 was measured, and the customer saw **"30 of 32 inside, rejected"** ([proof transaction](https://explorer.1am.xyz/tx/a8bf5484111565da5d7052e19846e8664eeec5b9786407da610dee2224112a69?network=preview)) without seeing a single diameter.
 
 How it works:
 
-1. At measuring time, the measuring station publishes a sealed fingerprint of the lot's 32 measurements on Midnight (a salted hash, the *commitment*). Nobody can read the values from it, and from then on they cannot change.
+1. At measuring time, the measuring station publishes a sealed fingerprint of the lot's 32 measurements on Midnight (a hiding *commitment*, bound to that lot and that drawing). Nobody can read the values from it, and from then on they cannot change. The customer approved that station beforehand.
 2. When the customer asks, the supplier publishes a zero-knowledge proof of **how many parts sit inside the band**, checked against that fingerprint.
 3. The customer sees the count, the verdict under its acceptance number and the transactions. Never the measurements.
 4. If one part is disputed, the supplier discloses that single value, proven to belong to the committed lot. The other 31 stay private.
@@ -21,17 +21,18 @@ How it works:
 | --- | --- |
 | Live demo | https://lotproof.154-53-53-223.sslip.io (Midnight Preview) |
 | Judges' guide | [JUDGES.md](JUDGES.md): three-minute walkthrough, where each claim is enforced, on-chain links |
-| Contract on Preview | [`e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49`](https://explorer.1am.xyz/contract/e74b37e7ef6ad0e850bb1b110b9f8bea2f222c2c6700a9bb02fdd3740ae5eb49?network=preview) (1AM Explorer) |
+| Contract on Preview | [`71e8f660aab5109d51842db8dbf3521cb3fb86ab4ffa4cd802270dd3e8e3324f`](https://explorer.1am.xyz/contract/71e8f660aab5109d51842db8dbf3521cb3fb86ab4ffa4cd802270dd3e8e3324f?network=preview) (1AM Explorer) |
 | Contract on local devnet | deployed and exercised end to end, see [How to verify](#how-to-verify-in-5-minutes) |
-| Tests | 19 simulator tests, 10 of them inputs the contract must refuse ([`src/test/lotproof.sim.test.ts`](src/test/lotproof.sim.test.ts)), and 4 end-to-end tests with real proofs ([`src/test/lotproof.test.ts`](src/test/lotproof.test.ts)); simulator tests run in CI on every push |
+| Tests | 25 simulator tests, 14 of them inputs the contract must refuse ([`src/test/lotproof.sim.test.ts`](src/test/lotproof.sim.test.ts)), and 4 end-to-end tests with real proofs ([`src/test/lotproof.test.ts`](src/test/lotproof.test.ts)); simulator tests run in CI on every push |
 
 ## What is public and what stays private
 
 | Public on Midnight | Private to the supplier |
 | --- | --- |
 | Drawing spec: nominal, band, acceptance number | The 32 measurements of each lot |
-| The station's commitment to the lot, at measuring time | The salt behind each commitment |
+| The station's commitment to the lot, at measuring time | The randomness behind each commitment |
 | Count of parts inside the band and the verdict | Which parts are out of band |
+| How many lots were committed and how many were proven | Drawing numbers and lot labels: the ledger only holds keyed hashes of them |
 | Any part the supplier chooses to disclose | Every part it does not disclose |
 
 ## Who uses it and who pays
@@ -56,8 +57,8 @@ What Lotproof does not change: if the instrument measures wrong, the proof is co
 ## Architecture
 
 ```
-contract/lotproof.compact   Compact contract, 5 circuits
-contract/witnesses.ts       private state: admin and station secrets, raw lots
+contract/lotproof.compact   Compact contract, 6 circuits
+contract/witnesses.ts       private state: admin, customer and station secrets, raw lots
 src/                        wallet, providers and network config (Midnight.js 5)
 src/test/                   simulator tests and end-to-end tests
 server/                     demo service that plays the supplier (one wallet)
@@ -69,16 +70,22 @@ compose.yml                 local devnet: node, indexer, proof server
 
 | Circuit | Who calls it | What reaches the ledger |
 | --- | --- | --- |
-| `registerStation(station)` | supplier admin | the station's key hash |
-| `publishSpec(specId, spec)` | supplier admin | nominal, lower, upper, acceptance number |
-| `commitLot(lotId, specId)` | registered station | `persistentHash(values, salt)`, the station key, status `Committed` |
-| `proveLot(lotId)` | supplier admin | count inside the band, `Accepted` or `Rejected` |
-| `disclosePart(lotId, index)` | supplier admin | one value, proven to be inside the committed lot |
+| constructor `(customerPk)` | supplier, at deployment | the supplier admin key and the customer key |
+| `registerStation(station)` | customer | the station's key hash |
+| `revokeStation(station)` | customer | removes the station; lots it already committed stay valid |
+| `publishSpec(specId, spec)` | customer | nominal, lower, upper, acceptance number |
+| `commitLot(lotId, specId)` | approved station | `persistentCommit` of the lot id, spec id and values, the station key, status `Committed`; `committedLots` + 1 |
+| `proveLot(lotId)` | supplier admin | count inside the band, `Accepted` or `Rejected`; `provenLots` + 1 |
+| `disclosePart(lotId, index)` | supplier admin | one value, proven to be inside the committed lot, at most once per part |
 
 Design choices:
 
-- **Identities come from witness secrets**, hashed with a domain separator (`lotproof:admin:v1`, `lotproof:station:v1`). The contract never relies on `ownPublicKey()`.
-- **The commitment is checked inside the proof.** `proveLot` re-hashes the private values and asserts they equal the station's commitment before it counts anything, so numbers changed after measuring cannot be proven (`"Measurements do not match the station commitment"`).
+- **Two parties, two keys.** The customer, not the supplier, approves measuring stations and sets the band and the acceptance number. The supplier proves and discloses. One contract per supplier-customer relationship.
+- **Identities come from witness secrets**, hashed with a domain separator (`lotproof:admin:v1`, `lotproof:customer:v1`, `lotproof:station:v1`). The contract never relies on `ownPublicKey()`.
+- **The commitment is checked inside the proof.** `proveLot` recomputes the commitment from the private values and asserts it equals the station's before it counts anything, so numbers changed after measuring cannot be proven (`"Measurements do not match the station commitment"`).
+- **A commitment opens for one lot only.** It is a `persistentCommit` over a domain tag, the lot id, the spec id and the values, so one lot's measurements cannot be reused to prove another lot or another drawing.
+- **Unproven lots are visible.** `committedLots - provenLots` tells the customer how many measured lots the supplier has not proven, so it cannot quietly pick which lots to show.
+- **Ids carry no labels.** The demo derives lot and drawing ids with a keyed hash (SHA-256 over a key the two parties share off-chain), so production dates and drawing numbers never reach the public ledger.
 - **Lots have a fixed sample of 32** because Compact vectors have a static length. Counting uses `fold`; picking one disputed part also uses `fold`, since vectors cannot be indexed with a runtime value.
 - **Values are micrometres** (`Uint<32>`), so the band check is plain unsigned comparison.
 
@@ -108,7 +115,7 @@ yarn compile
 ## How to verify in 5 minutes
 
 ```bash
-yarn test:sim        # 19 tests, no network needed
+yarn test:sim        # 25 tests, no network needed
 yarn env:up          # local node, indexer and proof server (ports bound to 127.0.0.1)
 yarn wait:dust
 yarn test:local      # deploys, registers a station, proves a lot, refuses a tampered one
@@ -131,7 +138,7 @@ Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repo
 - Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views, deployment on Preview with a public demo.
 - Next: narrated video and deck, a real lot from the manufacturer above, and the station adapter.
 
-The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 65 s on Preview.
+The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 70 to 80 s on Preview.
 
 ## License
 

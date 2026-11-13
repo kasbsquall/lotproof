@@ -48,8 +48,11 @@ export class LotproofSimulator {
 
   static async create(overrides: Partial<typeof witnesses> = {}): Promise<LotproofSimulator> {
     const sim = new LotproofSimulator(overrides);
-    const initial = createLotproofPrivateState(bytes32(), bytes32());
-    const r = await sim.contract.initialState(createConstructorContext(initial, sim.coinPublicKey));
+    const initial = createLotproofPrivateState(bytes32(), bytes32(), bytes32());
+    const r = await sim.contract.initialState(
+      createConstructorContext(initial, sim.coinPublicKey),
+      pureCircuits.customerKey(initial.customerSecret),
+    );
     sim.state = r.currentContractState.data;
     sim.privateState = r.currentPrivateState;
     sim.zswapLocalState = r.currentZswapLocalState;
@@ -84,13 +87,16 @@ export class LotproofSimulator {
     this.privateState = withLot(this.privateState, lotId, lot);
   }
 
-  /** Swaps the caller's secrets, to act as an outsider. */
-  impersonate(adminSecret: Uint8Array, stationSecret: Uint8Array): void {
-    this.privateState = { ...this.privateState, adminSecret, stationSecret };
+  /** Swaps some of the caller's secrets, to act as an outsider or as another role. */
+  impersonate(secrets: Partial<Pick<LotproofPrivateState, 'adminSecret' | 'customerSecret' | 'stationSecret'>>): void {
+    this.privateState = { ...this.privateState, ...secrets };
   }
 
   registerStation(station: Uint8Array) {
     return this.run('registerStation', (c) => this.contract.impureCircuits.registerStation(c, station));
+  }
+  revokeStation(station: Uint8Array) {
+    return this.run('revokeStation', (c) => this.contract.impureCircuits.revokeStation(c, station));
   }
   publishSpec(specId: Uint8Array, spec: Spec) {
     return this.run('publishSpec', (c) => this.contract.impureCircuits.publishSpec(c, specId, spec));

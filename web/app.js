@@ -304,7 +304,7 @@ function renderLot(l) {
   $('#accN').textContent = proven(l) ? `${outOf(l)} out of ${l.sampleSize} parts` : 'no count recorded';
   const reg = S.state.setupTxs.find((t) => t.step === 'registerStation');
   $('#stV').innerHTML = l.station ? `<span class="mono">key ${esc(short(l.station, 6, 4))}</span>` : '<span class="st-mute">not committed yet</span>';
-  $('#stN').textContent = reg?.blockHeight ? `registered on-chain at block ${reg.blockHeight}` : 'registered on-chain';
+  $('#stN').textContent = reg?.blockHeight ? `approved by the customer at block ${reg.blockHeight}` : 'approved by the customer on-chain';
 
   const sig = JSON.stringify([l.id, l.status, l.inTolerance, l.disclosed, sp, innerWidth < 600]);
   if (sig !== S.chartSig) {
@@ -472,7 +472,7 @@ function renderTrail(l, sp) {
     `<tr style="--i:${rows.length}"><td><div class="what"><i class="ph-light ${icon}"></i>${what}</div><div class="who">${who}</div></td><td data-l="Time" class="num">${t}</td><td data-l="Block" class="r num">${block}</td><td data-l="Transaction">${tx}</td><td data-l="Status">${status}</td></tr>`);
   const ok = (t) => `<span class="chip st-ok"><i class="ph-light ph-check"></i>${t}</span>`;
   for (const c of txOf(l, 'commitLot')) {
-    row('ph-fingerprint', 'Station commitment', `commitLot, hash ${esc(short(l.commitment, 6, 4))} of ${l.sampleSize ?? 32} salted values`, esc(fmtTime(c.at)), c.blockHeight ?? '–', hashCell(c.txHash), ok('On-chain'));
+    row('ph-fingerprint', 'Station commitment', `commitLot, commitment ${esc(short(l.commitment, 6, 4))} to ${l.sampleSize ?? 32} values, bound to this lot`, esc(fmtTime(c.at)), c.blockHeight ?? '–', hashCell(c.txHash), ok('On-chain'));
   }
   for (const p of txOf(l, 'proveLot')) {
     row('ph-seal-check', 'Supplier proof', proven(l) ? `proveLot, ${l.inTolerance} of ${l.sampleSize} inside` : 'proveLot', esc(fmtTime(p.at)), p.blockHeight ?? '–', hashCell(p.txHash), ok('Verified'));
@@ -498,7 +498,7 @@ function renderContract() {
   const setup = (setupTxs || []).map((t) => `<span>${esc(t.step)}</span><span class="num">${t.blockHeight ? `block ${t.blockHeight}` : 'block not reported'}</span><span class="num">${esc(fmtTime(t.at))}</span>${hashCell(t.txHash)}`).join('');
   $('#contract').innerHTML = `<span class="it"><i class="ph-light ph-file-code"></i>Contract ${hashText(a, 'contract')}<button class="copy" type="button" aria-label="Copy contract address" data-copy="${esc(a)}"><i class="ph-light ph-copy"></i></button></span>`
     + `<span class="it"><i class="ph-light ph-globe-simple"></i>${esc(netName(network))}${network === 'local' ? ', no public explorer' : explorer() ? `, verify in ${esc(explorer().name)}` : ''}</span>`
-    + `<span class="it num"><i class="ph-light ph-seal-check"></i>${plural(S.state.provenLots, 'lot', 'lots')} proven on this contract</span>`
+    + `<span class="it num"><i class="ph-light ph-seal-check"></i>${plural(S.state.provenLots, 'lot', 'lots')} proven on this contract${S.state.committedLots > S.state.provenLots ? `, ${S.state.committedLots - S.state.provenLots} committed and not proven` : ''}</span>`
     + (setup ? `<details><summary><i class="ph-light ph-caret-right car"></i>Contract setup, ${plural(setupTxs.length, 'transaction', 'transactions')}</summary><div class="setup">${setup}</div></details>` : '');
 }
 

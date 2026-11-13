@@ -89,20 +89,23 @@ describe(`Lotproof end to end (${network})`, () => {
     if (wallet) await wallet.stop();
   });
 
-  it('deploys with the supplier as admin', async () => {
-    const initial = createLotproofPrivateState(bytes32(), bytes32());
+  it('deploys with the supplier as admin and the customer fixed at deployment', async () => {
+    const initial = createLotproofPrivateState(bytes32(), bytes32(), bytes32());
     const deployed = await deployContract(providers, {
       compiledContract: CompiledLotproofContract,
       privateStateId: PRIVATE_STATE_ID,
       initialPrivateState: initial,
+      args: [pureCircuits.customerKey(initial.customerSecret)],
     } as never);
     address = deployed.deployTxData.public.contractAddress;
     txLog.push({ step: 'deploy', txHash: deployed.deployTxData.public.txHash });
     logger.info(`Lotproof deployed at ${address}`);
-    expect((await readLedger()).admin).toEqual(pureCircuits.adminKey(initial.adminSecret));
+    const l = await readLedger();
+    expect(l.admin).toEqual(pureCircuits.adminKey(initial.adminSecret));
+    expect(l.customer).toEqual(pureCircuits.customerKey(initial.customerSecret));
   });
 
-  it('registers the measuring station and publishes the drawing spec', async () => {
+  it('lets the customer approve the measuring station and publish the drawing spec', async () => {
     const ps = (await providers.privateStateProvider.forContract(address).get(PRIVATE_STATE_ID)) as LotproofPrivateState;
     await call('registerStation', 'registerStation', [pureCircuits.stationKey(ps.stationSecret)]);
     await call('publishSpec', 'publishSpec', [SPEC_ID, SHAFT]);
@@ -138,6 +141,8 @@ describe(`Lotproof end to end (${network})`, () => {
         args: [lot],
       } as never),
     ).rejects.toThrow(/do not match the station commitment/);
-    expect((await readLedger()).lots.lookup(lot).status).toBe(LotStatus.Committed);
+    const l = await readLedger();
+    expect(l.lots.lookup(lot).status).toBe(LotStatus.Committed);
+    expect(l.committedLots - l.provenLots).toBe(1n);
   });
 });

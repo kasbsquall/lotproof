@@ -1,11 +1,12 @@
 // This file is part of Lotproof.
 // SPDX-License-Identifier: Apache-2.0
-// Chain side of the demo service. The server plays the supplier: it holds the
-// measuring station secret, the admin secret and every lot's raw values in the
-// encrypted private state store. Nothing here leaves the machine except
-// commitments, counts and verdicts.
+// Chain side of the demo service. The server plays all three roles: it holds
+// the customer secret, the measuring station secret, the supplier admin secret
+// and every lot's raw values in the encrypted private state store. In a real
+// deployment each secret lives on its owner's machine. Nothing here leaves the
+// machine except commitments, counts and verdicts.
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { WebSocket } from 'ws';
 import pino from 'pino';
@@ -41,13 +42,18 @@ export const SPEC: Spec = { nominal: 12_000n, lower: 11_950n, upper: 12_050n, ma
 
 export type TxRecord = { step: string; txHash: string; blockHeight?: number; at: string };
 export type LotMeta = { id: string; label: string; createdAt: string; txs: TxRecord[]; refused?: string };
-type DemoState = { contractAddress?: string; deployTx?: TxRecord[]; lots: LotMeta[] };
+// idKey is shared by supplier and customer off-chain and never served.
+type DemoState = { contractAddress?: string; idKey?: string; deployTx?: TxRecord[]; lots: LotMeta[] };
 
-const asId = (label: string): Uint8Array => {
-  const out = new Uint8Array(32);
-  out.set(Buffer.from(label, 'utf8').subarray(0, 32));
-  return out;
-};
+/**
+ * On-chain id of a lot or drawing: a keyed hash of its label. Labels such as
+ * DRW-4471-rev-C or LOT-261110-002 never reach the ledger, and without the key
+ * nobody can test guesses against the ids that do.
+ */
+const asId = (idKey: string, label: string): Uint8Array =>
+  new Uint8Array(
+    createHash('sha256').update('lotproof:id:v1').update(Buffer.from(idKey, 'hex')).update(label, 'utf8').digest(),
+  );
 const idFromHex = (hex: string): Uint8Array => new Uint8Array(Buffer.from(hex, 'hex'));
 
 const loadState = (): DemoState =>
@@ -67,7 +73,10 @@ export class LotproofChain {
   private wallet!: MidnightWalletProvider;
   private providers!: LotproofProviders;
   private state: DemoState = loadState();
-  readonly specId = asId(SPEC_ID_LABEL);
+
+  get specId(): Uint8Array {
+    return asId(this.state.idKey!, SPEC_ID_LABEL);
+  }
 
   get address(): string | undefined {
     return this.state.contractAddress;
@@ -92,15 +101,18 @@ export class LotproofChain {
   }
 
   private async deploy(): Promise<void> {
-    const initial = createLotproofPrivateState(new Uint8Array(randomBytes(32)), new Uint8Array(randomBytes(32)));
+    const secret = () => new Uint8Array(randomBytes(32));
+    const initial = createLotproofPrivateState(secret(), secret(), secret());
     const deployed = await deployContract(this.providers, {
       compiledContract: CompiledLotproofContract,
       privateStateId: PRIVATE_STATE_ID,
       initialPrivateState: initial,
+      args: [pureCircuits.customerKey(initial.customerSecret)],
     } as never);
     const now = () => new Date().toISOString();
     this.state = {
       contractAddress: deployed.deployTxData.public.contractAddress,
+      idKey: randomBytes(32).toString('hex'),
       deployTx: [{ step: 'deploy', txHash: deployed.deployTxData.public.txHash, at: now() }],
       lots: [],
     };
@@ -131,7 +143,7 @@ export class LotproofChain {
   private newLot(): { id: Uint8Array; meta: LotMeta } {
     const n = this.state.lots.length + 1;
     const label = `LOT-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${String(n).padStart(3, '0')}`;
-    const id = asId(label);
+    const id = asId(this.state.idKey!, label);
     const meta: LotMeta = { id: toHex(id), label, createdAt: new Date().toISOString(), txs: [] };
     this.state.lots.unshift(meta);
     return { id, meta };
@@ -224,6 +236,7 @@ export class LotproofChain {
       network: NETWORK,
       contractAddress: this.state.contractAddress,
       setupTxs: this.state.deployTx ?? [],
+      committedLots: Number(l.committedLots),
       provenLots: Number(l.provenLots),
       spec: {
         id: SPEC_ID_LABEL,
