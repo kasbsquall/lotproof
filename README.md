@@ -34,6 +34,25 @@ How it works:
 | Count of parts inside the band and the verdict | Which parts are out of band |
 | Any part the supplier chooses to disclose | Every part it does not disclose |
 
+## Who uses it and who pays
+
+We showed the demo to a manufacturer in Peru that receives parts from outside suppliers, and asked six questions. It asked to stay anonymous and allowed us to quote it as "a Peruvian manufacturer". Its answers, translated from Spanish:
+
+- **What happens today.** Suppliers send certificates of conformity and dimensional reports as PDF or Excel files, mostly for critical parts. For tight tolerances the buyer reviews the measurements of specific characteristics before accepting a lot.
+- **The problem.** Confidentiality: dimensional reports "can reveal details about the precision and consistency of a supplier's manufacturing process", and not every supplier is willing to share complete measurements. And later on, "it can be hard to verify that the documents really belong to the lot that was delivered". The station's commitment answers that second point: the fingerprint is on Midnight before anyone knows the count.
+- **Who pays.** The supplier at first, because it is the one that has to show its production meets the agreed spec. A shared cost if the buyer saves inspection and validation time. Per lot, or a monthly subscription for frequent suppliers.
+- **What a real trial needs.** Measurements from real production, results that can be verified independently, and integration with the measuring instruments the plant already uses. The quality lead approves it and, depending on scope, operations management.
+
+This is one buyer's view after seeing the demo. It is not a pilot and not a purchase commitment.
+
+Adoption path, in the order the buyer asked for it:
+
+1. **A real lot.** The manufacturer agreed in principle to share one characteristic of a lot it has already inspected, anonymized, once it checks internally what it can release. When it arrives it runs on Preview unchanged and is linked here.
+2. **The station.** Today the demo service plays the measuring station. The next piece is an adapter that takes the report the measuring software already exports and commits it at measuring time, so nobody retypes numbers.
+3. **Pricing.** Paid by the supplier, per lot or monthly, as the buyer suggested. The customer verifies for free: reading the count and the transactions costs nothing.
+
+What Lotproof does not change: if the instrument measures wrong, the proof is correct about wrong numbers. Trust in the instrument and its calibration stays where it is today.
+
 ## Architecture
 
 ```
@@ -110,7 +129,7 @@ MIDNIGHT_NETWORK=local yarn server     # http://127.0.0.1:8787
 Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repository is new in this wave.
 
 - Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views, deployment on Preview with a public demo.
-- Next: narrated video and deck.
+- Next: narrated video and deck, a real lot from the manufacturer above, and the station adapter.
 
 The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 65 s on Preview.
 
