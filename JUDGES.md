@@ -4,7 +4,7 @@ A supplier proves to its customer how many parts of a lot sit inside the drawing
 
 ## Try it in three minutes
 
-Open the live demo: **https://lotproof.154-53-53-223.sslip.io** (Midnight Preview, no wallet needed).
+Open the live demo: **https://lotproof.avanc3.pe** (Midnight Preview, no wallet needed).
 
 1. Pick a lot on the left. The headline gives the count inside the band and the verdict under the customer's acceptance number. In the chart, marks inside the band are identical and sit flat on the nominal line. Parts outside the band appear only as a count, with no position.
 2. Click any transaction hash in **Proof trail**. It opens in the 1AM Preview explorer, where the call shows up as `commitLot()`, `proveLot()` or `disclosePart()`.
@@ -12,7 +12,7 @@ Open the live demo: **https://lotproof.154-53-53-223.sslip.io** (Midnight Previe
 4. Click **Try to change the numbers**. The station commits real readings, someone swaps in better ones, and the proof is refused by the contract: `Measurements do not match the station commitment`. No count reaches the ledger.
 5. Open **Supplier console** to see what only the supplier holds: the 32 raw values. Disclose one part and it moves to its real height in the customer's chart, with its value and deviation. The other 31 stay private.
 
-The demo service is rate limited to 6 chain jobs per address per hour, and runs one job at a time.
+The demo service is rate limited to 6 chain jobs per address and 30 in total per hour, and runs one job at a time.
 
 ## What to check in the code
 

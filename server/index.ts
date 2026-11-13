@@ -14,6 +14,10 @@ const PORT = Number(process.env['PORT'] ?? 8787);
 const HOST = process.env['HOST'] ?? '127.0.0.1';
 const MAX_QUEUE = 3;
 const JOBS_PER_IP_PER_HOUR = Number(process.env['JOBS_PER_IP_PER_HOUR'] ?? 6);
+// Global cap: every chain job spends DUST from the one demo wallet, whoever starts it.
+const JOBS_PER_HOUR = Number(process.env['JOBS_PER_HOUR'] ?? 30);
+const HOUR_MS = 3_600_000;
+const JOB_TTL_MS = HOUR_MS;
 const ALLOWED_ORIGIN = process.env['ALLOWED_ORIGIN'] ?? '*';
 
 type JobKind = 'measure' | 'tamper' | 'disclose';
@@ -32,6 +36,7 @@ const chain = new LotproofChain();
 const jobs = new Map<string, Job>();
 const queue: { job: Job; run: (j: Job) => Promise<unknown> }[] = [];
 const ipHits = new Map<string, number[]>();
+let globalHits: number[] = [];
 let running = false;
 let ready = false;
 let startError: string | undefined;
@@ -56,13 +61,30 @@ async function pump(): Promise<void> {
   }
 }
 
-function allow(ip: string): boolean {
+type Verdict = 'ok' | 'ip' | 'global';
+
+function allow(ip: string): Verdict {
   const now = Date.now();
-  const recent = (ipHits.get(ip) ?? []).filter((t) => now - t < 3_600_000);
-  if (recent.length >= JOBS_PER_IP_PER_HOUR) return false;
+  globalHits = globalHits.filter((t) => now - t < HOUR_MS);
+  if (globalHits.length >= JOBS_PER_HOUR) return 'global';
+  const recent = (ipHits.get(ip) ?? []).filter((t) => now - t < HOUR_MS);
+  if (recent.length >= JOBS_PER_IP_PER_HOUR) return 'ip';
   ipHits.set(ip, [...recent, now]);
-  return true;
+  globalHits = [...globalHits, now];
+  return 'ok';
 }
+
+/** Drops finished jobs and idle addresses after an hour, so memory stays bounded. */
+function prune(): void {
+  const now = Date.now();
+  for (const [id, j] of jobs) {
+    if ((j.status === 'done' || j.status === 'failed') && now - Date.parse(j.queuedAt) > JOB_TTL_MS) jobs.delete(id);
+  }
+  for (const [ip, hits] of ipHits) {
+    if (!hits.some((t) => now - t < HOUR_MS)) ipHits.delete(ip);
+  }
+}
+setInterval(prune, 10 * 60_000).unref();
 
 function send(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, {
@@ -87,7 +109,9 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 function enqueue(res: ServerResponse, ip: string, kind: JobKind, run: (j: Job) => Promise<unknown>): void {
   if (!ready) return send(res, 503, { error: startError ? 'Service failed to start' : 'Service is starting' });
   if (queue.length >= MAX_QUEUE) return send(res, 429, { error: 'Queue is full, try again shortly' });
-  if (!allow(ip)) return send(res, 429, { error: 'Hourly demo limit reached for this address' });
+  const verdict = allow(ip);
+  if (verdict === 'ip') return send(res, 429, { error: 'Hourly demo limit reached for this address' });
+  if (verdict === 'global') return send(res, 429, { error: 'The demo has reached its hourly limit of chain transactions. Try again later.' });
   const job: Job = { id: randomUUID(), kind, step: 'queued', status: 'queued', queuedAt: new Date().toISOString() };
   jobs.set(job.id, job);
   queue.push({ job, run });

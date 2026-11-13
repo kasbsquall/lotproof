@@ -36,6 +36,7 @@ services:
       HOST: 0.0.0.0
       PORT: '8787'
       JOBS_PER_IP_PER_HOUR: '6'
+      JOBS_PER_HOUR: '30'
     ports:
       - '127.0.0.1:8787:8787'
     volumes:

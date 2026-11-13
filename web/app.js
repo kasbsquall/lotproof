@@ -610,7 +610,8 @@ async function poll() {
     if (s.step && s.step !== j.step) {
       j.marks[s.step] = Date.now();
       j.step = s.step;
-      if (j.kind !== 'disclose' && (s.step === 'proving' || s.step === 'tampering')) loadState({ adoptNew: j.prevIds });
+      // Select the new lot as soon as the service creates it, so the previous verdict is not left on screen.
+      if (j.kind !== 'disclose' && s.step !== 'queued') loadState({ adoptNew: j.prevIds });
     }
     if (s.status === 'done') return finishJob(s.result);
     if (s.status === 'failed') {

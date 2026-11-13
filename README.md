@@ -19,7 +19,7 @@ How it works:
 
 | | |
 | --- | --- |
-| Live demo | https://lotproof.154-53-53-223.sslip.io (Midnight Preview) |
+| Live demo | https://lotproof.avanc3.pe (Midnight Preview) |
 | Judges' guide | [JUDGES.md](JUDGES.md): three-minute walkthrough, where each claim is enforced, on-chain links |
 | Contract on Preview | [`71e8f660aab5109d51842db8dbf3521cb3fb86ab4ffa4cd802270dd3e8e3324f`](https://explorer.1am.xyz/contract/71e8f660aab5109d51842db8dbf3521cb3fb86ab4ffa4cd802270dd3e8e3324f?network=preview) (1AM Explorer) |
 | Contract on local devnet | deployed and exercised end to end, see [How to verify](#how-to-verify-in-5-minutes) |
@@ -138,7 +138,7 @@ Built during Midnight Buildathon Wave 3 (November 2026). Everything in this repo
 - Done: contract, simulator tests, end-to-end tests on a local devnet, demo service, web views, deployment on Preview with a public demo.
 - Next: narrated video and deck, a real lot from the manufacturer above, and the station adapter.
 
-The public demo runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 70 to 80 s on Preview.
+The public demo at lotproof.avanc3.pe runs `deploy/compose.yml` on a small VM: the proof server and the demo service in Docker with memory and CPU limits, only the service published on 127.0.0.1 behind a TLS reverse proxy. One lot (commit plus proof) takes about 70 to 80 s on Preview.
 
 ## License
 
