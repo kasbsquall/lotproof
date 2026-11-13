@@ -16,19 +16,26 @@
 // inside the drawing tolerance, without handing over the raw measurements.
 //
 // One contract per supplier-customer relationship. Two roles hold keys:
-//   - the customer approves measuring stations and publishes the drawing spec
-//     (tolerance band and its own acceptance number);
-//   - the supplier proves lots and, if a part is disputed, discloses it.
+//   - the customer publishes drawing specs (tolerance band and its own
+//     acceptance number), approves each measuring station for one spec, and
+//     can later ask audit questions about any committed lot;
+//   - the supplier proves lots, answers audits and, if a part is disputed,
+//     discloses it.
 //
 // Flow:
-//   1. The customer approves a measuring station and publishes a spec.
-//   2. The station commits the lot's raw measurements at measuring time. The
-//      commitment binds the lot id and the spec id, so it cannot be reused for
-//      another lot. After this the values cannot change.
-//   3. Later, the supplier proves, against that commitment, how many parts are
-//      inside the band. Only the count and the verdict reach the ledger.
-//   4. If the customer disputes one part, the supplier can disclose that single
-//      value, proven to belong to the committed lot.
+//   1. The customer publishes a spec and approves a measuring station for it.
+//   2. The station commits the lot's raw measurements at measuring time, under
+//      the spec it was approved for. The commitment binds the lot id and the
+//      spec id. After this the values cannot change.
+//   3. The supplier proves, against that commitment, how many parts are inside
+//      the band. Only the count and the verdict reach the ledger.
+//   4. At any later time the customer can publish a new band (an audit spec)
+//      and request an audit of a committed lot. The supplier proves the count
+//      against the new band from the same commitment, without measuring again
+//      and without revealing values. Open requests are public, so an
+//      unanswered audit is visible.
+//   5. If the customer disputes one part of a proven lot, the supplier can
+//      disclose that single value, proven to belong to the committed lot.
 //
 // Lot and spec ids are opaque 32-byte values. The demo derives them off-chain
 // with a keyed hash, so labels such as drawing numbers never reach the ledger.
@@ -58,9 +65,17 @@ export struct Lot {
     sampleSize: Uint<8>;
 }
 
+export struct Audit {
+    lotId: Bytes<32>;
+    specId: Bytes<32>;
+    answered: Boolean;
+    inTolerance: Uint<8>;
+}
+
 export ledger admin: Bytes<32>;
 export ledger customer: Bytes<32>;
-export ledger stations: Set<Bytes<32>>;
+// station key -> the one spec it is approved to measure.
+export ledger stations: Map<Bytes<32>, Bytes<32>>;
 export ledger specs: Map<Bytes<32>, Spec>;
 export ledger lots: Map<Bytes<32>, Lot>;
 // lotId -> (part index -> disclosed value). Only parts the supplier chose to reveal.
@@ -68,6 +83,10 @@ export ledger disclosed: Map<Bytes<32>, Map<Uint<8>, Uint<32>>>;
 // committedLots - provenLots = lots measured but not yet proven, visible to the customer.
 export ledger committedLots: Counter;
 export ledger provenLots: Counter;
+// auditKey(lotId, specId) -> audit. requestedAudits - answeredAudits = audits still open.
+export ledger audits: Map<Bytes<32>, Audit>;
+export ledger requestedAudits: Counter;
+export ledger answeredAudits: Counter;
 
 witness adminSecret(): Bytes<32>;
 witness customerSecret(): Bytes<32>;
@@ -93,6 +112,10 @@ export pure circuit lotCommitment(lotId: Bytes<32>, specId: Bytes<32>,
                                   values: Vector<32, Uint<32>>, salt: Bytes<32>): Bytes<32> {
     return persistentCommit<[Bytes<32>, Bytes<32>, Bytes<32>, Vector<32, Uint<32>>]>(
         [pad(32, "lotproof:lot:v2"), lotId, specId, values], salt);
+}
+
+export pure circuit auditKey(lotId: Bytes<32>, specId: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<3, Bytes<32>>>([pad(32, "lotproof:audit:v1"), lotId, specId]);
 }
 
 export pure circuit countInTolerance(values: Vector<32, Uint<32>>, lower: Uint<32>, upper: Uint<32>): Uint<8> {
@@ -124,11 +147,13 @@ circuit assertCustomer(): [] {
     assert(customer == disclose(customerKey(customerSecret())), "Only the customer can do this");
 }
 
-export circuit registerStation(station: Bytes<32>): [] {
+export circuit registerStation(station: Bytes<32>, specId: Bytes<32>): [] {
     assertCustomer();
     const st = disclose(station);
+    const sp = disclose(specId);
+    assert(specs.member(sp), "Unknown spec");
     assert(!stations.member(st), "Station already approved");
-    stations.insert(st);
+    stations.insert(st, sp);
 }
 
 export circuit revokeStation(station: Bytes<32>): [] {
@@ -149,15 +174,15 @@ export circuit publishSpec(specId: Bytes<32>, spec: Spec): [] {
 }
 
 // Called by the measuring station right after measuring. Values stay on the
-// station; only the commitment is published.
-export circuit commitLot(lotId: Bytes<32>, specId: Bytes<32>): [] {
+// station; only the commitment is published. The spec is the one the customer
+// approved this station for, so the station cannot pick a wider band.
+export circuit commitLot(lotId: Bytes<32>): [] {
     const st = disclose(stationKey(stationSecret()));
     assert(stations.member(st), "Station not registered");
+    const sp = stations.lookup(st);
     const id = disclose(lotId);
-    const sp = disclose(specId);
-    assert(specs.member(sp), "Unknown spec");
     assert(!lots.member(id), "Lot already committed");
-    const c = disclose(lotCommitment(lotId, specId, lotMeasurements(lotId), lotSalt(lotId)));
+    const c = disclose(lotCommitment(lotId, sp, lotMeasurements(lotId), lotSalt(lotId)));
     lots.insert(id, Lot {
         specId: sp,
         station: st,
@@ -204,6 +229,7 @@ export circuit disclosePart(lotId: Bytes<32>, index: Uint<8>): [] {
     assert(lots.member(id), "Unknown lot");
     assert(i < 32, "Part index out of range");
     const lot = lots.lookup(id);
+    assert(lot.status != LotStatus.Committed, "Lot not proven yet");
     const values = lotMeasurements(lotId);
     assert(lotCommitment(lotId, lot.specId, values, lotSalt(lotId)) == lot.commitment,
            "Measurements do not match the station commitment");
@@ -213,4 +239,37 @@ export circuit disclosePart(lotId: Bytes<32>, index: Uint<8>): [] {
     }
     assert(!disclosed.lookup(id).member(i), "Part already disclosed");
     disclosed.lookup(id).insert(i, v);
+}
+
+// The customer asks a new question about a committed lot: how many parts sit
+// inside the band of another spec (for example a tighter audit band).
+export circuit requestAudit(lotId: Bytes<32>, specId: Bytes<32>): [] {
+    assertCustomer();
+    const id = disclose(lotId);
+    const sp = disclose(specId);
+    assert(lots.member(id), "Unknown lot");
+    assert(specs.member(sp), "Unknown spec");
+    const k = auditKey(id, sp);
+    assert(!audits.member(k), "Audit already requested");
+    audits.insert(k, Audit { lotId: id, specId: sp, answered: false, inTolerance: 0 });
+    requestedAudits.increment(1);
+}
+
+// The supplier answers from the same commitment: no new measurement, no values
+// revealed, only the count against the audit band.
+export circuit answerAudit(lotId: Bytes<32>, specId: Bytes<32>): [] {
+    assertAdmin();
+    const id = disclose(lotId);
+    const sp = disclose(specId);
+    const k = auditKey(id, sp);
+    assert(audits.member(k), "No audit requested");
+    assert(!audits.lookup(k).answered, "Audit already answered");
+    const lot = lots.lookup(id);
+    const values = lotMeasurements(lotId);
+    assert(lotCommitment(lotId, lot.specId, values, lotSalt(lotId)) == lot.commitment,
+           "Measurements do not match the station commitment");
+    const spec = specs.lookup(sp);
+    const ok = disclose(countInTolerance(values, spec.lower, spec.upper));
+    audits.insert(k, Audit { lotId: id, specId: sp, answered: true, inTolerance: ok });
+    answeredAudits.increment(1);
 }

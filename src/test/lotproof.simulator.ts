@@ -92,8 +92,8 @@ export class LotproofSimulator {
     this.privateState = { ...this.privateState, ...secrets };
   }
 
-  registerStation(station: Uint8Array) {
-    return this.run('registerStation', (c) => this.contract.impureCircuits.registerStation(c, station));
+  registerStation(station: Uint8Array, specId: Uint8Array) {
+    return this.run('registerStation', (c) => this.contract.impureCircuits.registerStation(c, station, specId));
   }
   revokeStation(station: Uint8Array) {
     return this.run('revokeStation', (c) => this.contract.impureCircuits.revokeStation(c, station));
@@ -101,8 +101,14 @@ export class LotproofSimulator {
   publishSpec(specId: Uint8Array, spec: Spec) {
     return this.run('publishSpec', (c) => this.contract.impureCircuits.publishSpec(c, specId, spec));
   }
-  commitLot(lotId: Uint8Array, specId: Uint8Array) {
-    return this.run('commitLot', (c) => this.contract.impureCircuits.commitLot(c, lotId, specId));
+  commitLot(lotId: Uint8Array) {
+    return this.run('commitLot', (c) => this.contract.impureCircuits.commitLot(c, lotId));
+  }
+  requestAudit(lotId: Uint8Array, specId: Uint8Array) {
+    return this.run('requestAudit', (c) => this.contract.impureCircuits.requestAudit(c, lotId, specId));
+  }
+  answerAudit(lotId: Uint8Array, specId: Uint8Array) {
+    return this.run('answerAudit', (c) => this.contract.impureCircuits.answerAudit(c, lotId, specId));
   }
   proveLot(lotId: Uint8Array) {
     return this.run('proveLot', (c) => this.contract.impureCircuits.proveLot(c, lotId));

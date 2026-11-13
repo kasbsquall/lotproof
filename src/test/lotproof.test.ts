@@ -37,6 +37,8 @@ const logger = pino({ level: process.env['LOG_LEVEL'] ?? 'info', transport: { ta
 
 const SHAFT: Spec = { nominal: 12_000n, lower: 11_950n, upper: 12_050n, maxDefects: 1n };
 const SPEC_ID = idFrom('DRW-4471-rev-C');
+const AUDIT_ID = idFrom('DRW-4471-rev-C-AUDIT');
+const TIGHT: Spec = { nominal: 12_000n, lower: 11_980n, upper: 12_020n, maxDefects: 0n };
 const good = (): bigint[] => Array.from({ length: 32 }, (_, i) => 11_970n + BigInt((i * 7) % 60));
 
 describe(`Lotproof end to end (${network})`, () => {
@@ -105,19 +107,20 @@ describe(`Lotproof end to end (${network})`, () => {
     expect(l.customer).toEqual(pureCircuits.customerKey(initial.customerSecret));
   });
 
-  it('lets the customer approve the measuring station and publish the drawing spec', async () => {
+  it('lets the customer publish the drawing spec and approve the measuring station for it', async () => {
     const ps = (await providers.privateStateProvider.forContract(address).get(PRIVATE_STATE_ID)) as LotproofPrivateState;
-    await call('registerStation', 'registerStation', [pureCircuits.stationKey(ps.stationSecret)]);
     await call('publishSpec', 'publishSpec', [SPEC_ID, SHAFT]);
+    await call('registerStation', 'registerStation', [pureCircuits.stationKey(ps.stationSecret), SPEC_ID]);
     const l = await readLedger();
     expect(l.specs.lookup(SPEC_ID).upper).toBe(SHAFT.upper);
+    expect(l.stations.lookup(pureCircuits.stationKey(ps.stationSecret))).toEqual(SPEC_ID);
   });
 
   it('commits a lot at measuring time and proves 32 of 32 in tolerance', async () => {
     const lot = idFrom(`LOT-${Date.now()}`);
     const values = good();
     await updatePrivate((s) => withLot(s, lot, { values, salt: bytes32() }));
-    await call('commitLot', 'commitLot', [lot, SPEC_ID]);
+    await call('commitLot', 'commitLot', [lot]);
     await call('proveLot', 'proveLot', [lot]);
     const rec = (await readLedger()).lots.lookup(lot);
     expect(rec.status).toBe(LotStatus.Accepted);
@@ -130,7 +133,7 @@ describe(`Lotproof end to end (${network})`, () => {
     const salt = bytes32();
     const bad = good().map((v, i) => (i < 3 ? 12_090n : v));
     await updatePrivate((s) => withLot(s, lot, { values: bad, salt }));
-    await call('commitLot (tamper case)', 'commitLot', [lot, SPEC_ID]);
+    await call('commitLot (tamper case)', 'commitLot', [lot]);
     await updatePrivate((s) => withLot(s, lot, { values: good(), salt }));
     await expect(
       submitCallTx(providers, {
@@ -144,5 +147,24 @@ describe(`Lotproof end to end (${network})`, () => {
     const l = await readLedger();
     expect(l.lots.lookup(lot).status).toBe(LotStatus.Committed);
     expect(l.committedLots - l.provenLots).toBe(1n);
+  });
+
+  it('rejects a lot with 2 parts out, discloses one, and answers a later audit against a tighter band', async () => {
+    const lot = idFrom(`REJ-${Date.now()}`);
+    const values = good().map((v, i) => (i === 3 ? 12_068n : i === 9 ? 11_942n : v));
+    await updatePrivate((s) => withLot(s, lot, { values, salt: bytes32() }));
+    await call('commitLot (rejected case)', 'commitLot', [lot]);
+    await call('proveLot (rejected case)', 'proveLot', [lot]);
+    let l = await readLedger();
+    expect(l.lots.lookup(lot)).toMatchObject({ status: LotStatus.Rejected, inTolerance: 30n });
+    await call('disclosePart', 'disclosePart', [lot, 3n]);
+    l = await readLedger();
+    expect(l.disclosed.lookup(lot).lookup(3n)).toBe(12_068n);
+    await call('publishSpec (audit band)', 'publishSpec', [AUDIT_ID, TIGHT]);
+    await call('requestAudit', 'requestAudit', [lot, AUDIT_ID]);
+    await call('answerAudit', 'answerAudit', [lot, AUDIT_ID]);
+    l = await readLedger();
+    const expected = BigInt(values.filter((v) => v >= TIGHT.lower && v <= TIGHT.upper).length);
+    expect(l.audits.lookup(pureCircuits.auditKey(lot, AUDIT_ID))).toMatchObject({ answered: true, inTolerance: expected });
   });
 });

@@ -39,6 +39,9 @@ export const logger = pino({ level: process.env['LOG_LEVEL'] ?? 'info' });
 
 export const SPEC_ID_LABEL = 'DRW-4471-rev-C';
 export const SPEC: Spec = { nominal: 12_000n, lower: 11_950n, upper: 12_050n, maxDefects: 1n };
+// A tighter band the customer publishes later to audit lots already committed.
+export const AUDIT_ID_LABEL = 'DRW-4471-rev-C audit, tight band';
+export const AUDIT_SPEC: Spec = { nominal: 12_000n, lower: 11_980n, upper: 12_020n, maxDefects: 0n };
 
 export type TxRecord = { step: string; txHash: string; blockHeight?: number; at: string };
 export type LotMeta = { id: string; label: string; createdAt: string; txs: TxRecord[]; refused?: string };
@@ -78,6 +81,10 @@ export class LotproofChain {
     return asId(this.state.idKey!, SPEC_ID_LABEL);
   }
 
+  get auditId(): Uint8Array {
+    return asId(this.state.idKey!, AUDIT_ID_LABEL);
+  }
+
   get address(): string | undefined {
     return this.state.contractAddress;
   }
@@ -93,6 +100,7 @@ export class LotproofChain {
     if (!password) throw new Error('LOTPROOF_STORE_PASSWORD is required');
     this.providers = buildProviders(this.wallet, zkConfigPath, config, `lotproof-${NETWORK}`, password);
     if (!this.state.contractAddress) await this.deploy();
+    await this.ensureSetup();
     logger.info(`Lotproof ready on ${NETWORK} at ${this.state.contractAddress}`);
   }
 
@@ -117,9 +125,34 @@ export class LotproofChain {
       lots: [],
     };
     saveState(this.state);
-    this.state.deployTx!.push(await this.call('registerStation', [pureCircuits.stationKey(initial.stationSecret)]));
-    this.state.deployTx!.push(await this.call('publishSpec', [this.specId, SPEC]));
-    saveState(this.state);
+  }
+
+  private async readLedger() {
+    const read = await this.providers.publicDataProvider.queryContractState(this.state.contractAddress!);
+    if (!read) throw new Error('Contract state not found');
+    return ledger(read.contractState.deserialize({ v9: ContractState }).data);
+  }
+
+  /**
+   * The customer's setup: publish the spec, approve the station for it, publish
+   * the audit band. Each step runs only if the ledger does not have it yet, so a
+   * restart after a failed step resumes instead of leaving the demo stuck.
+   */
+  private async ensureSetup(): Promise<void> {
+    const view = this.providers.privateStateProvider.forContract(this.state.contractAddress!);
+    const ps = (await view.get(PRIVATE_STATE_ID)) as LotproofPrivateState | null;
+    if (!ps) throw new Error('Private state not found');
+    const station = pureCircuits.stationKey(ps.stationSecret);
+    const steps: [string, (l: Awaited<ReturnType<LotproofChain['readLedger']>>) => boolean, unknown[]][] = [
+      ['publishSpec', (l) => l.specs.member(this.specId), [this.specId, SPEC]],
+      ['registerStation', (l) => l.stations.member(station), [station, this.specId]],
+      ['publishSpec', (l) => l.specs.member(this.auditId), [this.auditId, AUDIT_SPEC]],
+    ];
+    for (const [circuit, done, args] of steps) {
+      if (done(await this.readLedger())) continue;
+      this.state.deployTx = [...(this.state.deployTx ?? []), await this.call(circuit, args)];
+      saveState(this.state);
+    }
   }
 
   private async call(circuitId: string, args: unknown[]): Promise<TxRecord> {
@@ -155,7 +188,7 @@ export class LotproofChain {
     onStep('measuring');
     await this.updatePrivate((s) => withLot(s, id, { values: simulateLot(defects), salt: new Uint8Array(randomBytes(32)) }));
     onStep('committing');
-    meta.txs.push(await this.call('commitLot', [id, this.specId]));
+    meta.txs.push(await this.call('commitLot', [id]));
     saveState(this.state);
     onStep('proving');
     meta.txs.push(await this.call('proveLot', [id]));
@@ -170,7 +203,7 @@ export class LotproofChain {
     onStep('measuring');
     await this.updatePrivate((s) => withLot(s, id, { values: simulateLot(3), salt }));
     onStep('committing');
-    meta.txs.push(await this.call('commitLot', [id, this.specId]));
+    meta.txs.push(await this.call('commitLot', [id]));
     saveState(this.state);
     onStep('tampering');
     await this.updatePrivate((s) => withLot(s, id, { values: simulateLot(0), salt }));
@@ -179,12 +212,38 @@ export class LotproofChain {
       meta.txs.push(await this.call('proveLot', [id]));
     } catch (e) {
       const msg = String((e as Error).message ?? e);
-      meta.refused = /do not match the station commitment/.test(msg)
-        ? 'Measurements do not match the station commitment'
-        : 'The contract refused the proof';
+      // Only the contract's own assertion counts as a refusal; anything else
+      // (proof server, indexer, network) fails the job instead.
+      if (!/do not match the station commitment/.test(msg)) throw e;
+      meta.refused = 'Measurements do not match the station commitment';
     }
     saveState(this.state);
     return meta;
+  }
+
+  /** Customer asks a new question about a committed lot; supplier answers from the same commitment. */
+  async audit(lotHex: string, onStep: (s: string) => void): Promise<LotMeta> {
+    const meta = this.state.lots.find((l) => l.id === lotHex);
+    if (!meta) throw new Error('Unknown lot');
+    const id = idFromHex(lotHex);
+    onStep('requesting');
+    meta.txs.push({ ...(await this.call('requestAudit', [id, this.auditId])), step: 'requestAudit' });
+    saveState(this.state);
+    onStep('answering');
+    meta.txs.push({ ...(await this.call('answerAudit', [id, this.auditId])), step: 'answerAudit' });
+    saveState(this.state);
+    return meta;
+  }
+
+  /** What the HTTP layer checks before queueing a job, so a doomed request does not take a turn. */
+  canAudit(lotHex: string): boolean {
+    const m = this.state.lots.find((l) => l.id === lotHex);
+    return !!m && !m.refused && m.txs.some((t) => t.step === 'commitLot') && !m.txs.some((t) => t.step === 'requestAudit');
+  }
+
+  canDisclose(lotHex: string): boolean {
+    const m = this.state.lots.find((l) => l.id === lotHex);
+    return !!m && m.txs.some((t) => t.step === 'proveLot');
   }
 
   async disclose(lotHex: string, index: number): Promise<TxRecord> {
@@ -211,10 +270,9 @@ export class LotproofChain {
 
   /** Public view: what any customer could read from the indexer, plus tx hashes. */
   async publicView() {
-    const read = await this.providers.publicDataProvider.queryContractState(this.state.contractAddress!);
-    if (!read) throw new Error('Contract state not found');
-    const l = ledger(read.contractState.deserialize({ v9: ContractState }).data);
+    const l = await this.readLedger();
     const spec = l.specs.lookup(this.specId);
+    const auditSpec = l.specs.member(this.auditId) ? l.specs.lookup(this.auditId) : null;
     const lots = this.state.lots.map((meta) => {
       const id = idFromHex(meta.id);
       if (!l.lots.member(id)) return { ...meta, status: 'measuring' };
@@ -230,6 +288,12 @@ export class LotproofChain {
         commitment: toHex(rec.commitment),
         station: toHex(rec.station),
         disclosed,
+        audit: (() => {
+          const k = pureCircuits.auditKey(id, this.auditId);
+          if (!l.audits.member(k)) return null;
+          const a = l.audits.lookup(k);
+          return { answered: a.answered, inTolerance: a.answered ? Number(a.inTolerance) : null };
+        })(),
       };
     });
     return {
@@ -238,6 +302,16 @@ export class LotproofChain {
       setupTxs: this.state.deployTx ?? [],
       committedLots: Number(l.committedLots),
       provenLots: Number(l.provenLots),
+      requestedAudits: Number(l.requestedAudits),
+      answeredAudits: Number(l.answeredAudits),
+      auditSpec: auditSpec
+        ? {
+            id: AUDIT_ID_LABEL,
+            nominalUm: Number(auditSpec.nominal),
+            lowerUm: Number(auditSpec.lower),
+            upperUm: Number(auditSpec.upper),
+          }
+        : null,
       spec: {
         id: SPEC_ID_LABEL,
         nominalUm: Number(spec.nominal),

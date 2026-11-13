@@ -7,10 +7,11 @@ A supplier proves to its customer how many parts of a lot sit inside the drawing
 Open the live demo: **https://lotproof.avanc3.pe** (Midnight Preview, no wallet needed).
 
 1. Pick a lot on the left. The headline gives the count inside the band and the verdict under the customer's acceptance number. In the chart, marks inside the band are identical and sit flat on the nominal line. Parts outside the band appear only as a count, with no position.
-2. Click any transaction hash in **Proof trail**. It opens in the 1AM Preview explorer, where the call shows up as `commitLot()`, `proveLot()` or `disclosePart()`.
+2. Click any transaction hash in **Proof trail**. It opens in the 1AM Preview explorer, where the call shows up as `commitLot()`, `proveLot()`, `disclosePart()`, `requestAudit()` or `answerAudit()`.
 3. Click **Measure a new lot** (choose how many parts fall out). The station commits the measurements, then the supplier proves the count. Both are real Preview transactions, about 60 to 90 seconds in total.
-4. Click **Try to change the numbers**. The station commits real readings, someone swaps in better ones, and the proof is refused by the contract: `Measurements do not match the station commitment`. No count reaches the ledger.
+4. Click **Simulate tampering**. The station commits real readings, someone swaps in better ones, and the proof is refused by the contract: `Measurements do not match the station commitment`. No count reaches the ledger.
 5. Open **Supplier console** to see what only the supplier holds: the 32 raw values. Disclose one part and it moves to its real height in the customer's chart, with its value and deviation. The other 31 stay private.
+6. Pick an accepted lot and click **Audit with a tighter band**. As the customer you publish a new question; the supplier proves how many parts fit 12.000 ± 0.020 mm from the commitment made at measuring time. No new measurement, no value revealed.
 
 The demo service is rate limited to 6 chain jobs per address and 30 in total per hour, and runs one job at a time.
 
@@ -20,20 +21,22 @@ The demo service is rate limited to 6 chain jobs per address and 30 in total per
 | --- | --- |
 | Values cannot change after measuring | `proveLot` and `disclosePart` recompute the commitment from the private values and assert equality with the station's (`contract/lotproof.compact`) |
 | A commitment opens for its own lot only | `lotCommitment` is a `persistentCommit` over a domain tag, the lot id, the spec id and the values; a test reuses one lot's values and salt to prove another and is refused |
-| The customer, not the supplier, approves stations and sets the band and acceptance number | `registerStation`, `revokeStation` and `publishSpec` call `assertCustomer()`; the customer key is fixed in the constructor |
-| Only an approved station can commit | `commitLot` derives the station key from a witness secret and checks `stations.member`; a revoked station is refused, its earlier lots stay valid |
+| The customer, not the supplier, approves stations and sets the band and acceptance number | `registerStation`, `revokeStation`, `publishSpec` and `requestAudit` call `assertCustomer()`; the customer key is fixed in the constructor |
+| Only an approved station can commit, and only under the spec it was approved for | `commitLot` derives the station key from a witness secret and reads its spec from `stations`; a revoked station is refused, its earlier lots stay valid |
+| A later audit is answered from the sealed values | `answerAudit` recomputes the lot's commitment from the private values, then counts them against the audit spec; requests and answers are counted publicly |
 | Only the supplier admin can prove or disclose | `assertAdmin()`; identities are `persistentHash` of witness secrets with domain separators, never `ownPublicKey()` |
-| The supplier cannot hide a measured lot | `committedLots` and `provenLots` are public; their difference is the number of lots measured and not proven |
+| The supplier cannot hide a measured lot or an audit | `committedLots`, `provenLots`, `requestedAudits` and `answeredAudits` are public |
 | Only the count and the verdict are public | `proveLot` discloses `inTolerance` and the status; the vector of values never leaves the witness |
-| One disclosed part belongs to the committed lot | `disclosePart` re-checks the commitment, then picks the value with `fold`, since vectors cannot be indexed at runtime; the same part cannot be disclosed twice |
+| One disclosed part belongs to the committed lot | `disclosePart` only runs on a proven lot, re-checks the commitment, then picks the value with `fold`, since vectors cannot be indexed at runtime; the same part cannot be disclosed twice |
 | Drawing numbers and lot labels stay off the ledger | the demo derives ids with a keyed SHA-256 (`server/chain.ts`, `asId`); the ledger only sees 32 opaque bytes |
 | Band edges count as inside | `countInTolerance` uses `v >= lower && v <= upper`; the web view uses the same rule |
 
 Tests:
 
 ```bash
-yarn test:sim      # 25 simulator tests, 14 of them inputs the contract must refuse
-yarn test:local    # 4 end-to-end tests with real proofs on a local devnet
+yarn test:sim      # 32 simulator tests, 17 of them inputs the contract must refuse
+yarn test:local    # 5 end-to-end tests with real proofs on a local devnet
+yarn test:preview  # the same 5 on Midnight Preview (passed on 13 Nov 2026)
 ```
 
 CI compiles the contract with Compact 0.36.0, type-checks and runs the simulator tests on every push.
@@ -42,17 +45,21 @@ CI compiles the contract with Compact 0.36.0, type-checks and runs the simulator
 
 | What | Link |
 | --- | --- |
-| Contract | [71e8f660…e8e3324f](https://explorer.1am.xyz/contract/71e8f660aab5109d51842db8dbf3521cb3fb86ab4ffa4cd802270dd3e8e3324f?network=preview) |
-| Deploy, with the customer key in the constructor | [0d32401c…6840ade0](https://explorer.1am.xyz/tx/0d32401c0ef60310b309321123ef391ca4c8e08af347b6bbcda5fa7b6840ade0?network=preview) |
-| Customer approves the station | [13180b42…eb3b6980](https://explorer.1am.xyz/tx/13180b426a7d5257fd07944968bf2875e61af2bc1294e2d9caec2ab5eb3b6980?network=preview), block 96051 |
-| Customer publishes the spec | [ec721c18…c0269fa1](https://explorer.1am.xyz/tx/ec721c18a1e8781bcb6d2d3d3833a601cc1be4489fed3530eeefb046c0269fa1?network=preview), block 96056 |
-| Lot LOT-261113-001 committed, then proven 31 of 32 inside, accepted | [b03e50c4…bc4fa92e](https://explorer.1am.xyz/tx/b03e50c41c7358664940b31ef84610f2afd388c65f1f59c708cd3680bc4fa92e?network=preview), block 96066; [1b7f5777…9aa3f440](https://explorer.1am.xyz/tx/1b7f577760a36c116962988a24dd210442b6bd9bcc950a64000b67869aa3f440?network=preview), block 96072 |
-| Lot LOT-261113-002 committed | [51f0cbad…94ff0b51](https://explorer.1am.xyz/tx/51f0cbadba3e95c61513a4fd47cb3d8412ed133c3bddd3afcda9d3b894ff0b51?network=preview), block 96078 |
-| Lot LOT-261113-002 proven, 30 of 32 inside, rejected | [a8bf5484…24112a69](https://explorer.1am.xyz/tx/a8bf5484111565da5d7052e19846e8664eeec5b9786407da610dee2224112a69?network=preview), block 96084 |
-| Part #4 of LOT-261113-002 disclosed, 12.068 mm | [94617211…28d15bce](https://explorer.1am.xyz/tx/946172111f6c4194520ef345d19cc49324ef60d8195b81d0c5f75bea28d15bce?network=preview), block 96096 |
-| Lot LOT-261113-003 committed, then the tampered proof refused (no transaction) | [234cafb3…cd21ffc8](https://explorer.1am.xyz/tx/234cafb3b9c4f79cd40b614f13cba204ae54d837800ed3f1b1e22857cd21ffc8?network=preview), block 96090 |
+| Contract | [8ae9c803…fcad9128](https://explorer.1am.xyz/contract/8ae9c803faa306226eb3203b57f4b48d6f75b797a1aadf02c025b66dfcad9128?network=preview) |
+| Deploy, with the customer key in the constructor | [0515b8a3…4d34cfbe](https://explorer.1am.xyz/tx/0515b8a3a5ce9d9781303803add639458791b040ce9c93fcf789a6304d34cfbe?network=preview) |
+| Customer publishes the spec | [a489e60f…ba4a5552](https://explorer.1am.xyz/tx/a489e60fd797d93d97526f42a1f128abb4ab70a07602062583461a01ba4a5552?network=preview), block 98105 |
+| Customer approves the station for that spec | [8767422d…a9dbf3ae](https://explorer.1am.xyz/tx/8767422da213ef3f28d21ccead3e59684757e5d38e1eafe7d70d6b5ea9dbf3ae?network=preview), block 98110 |
+| Customer publishes the audit band, 12.000 ± 0.020 mm | [917c72d1…e8125804](https://explorer.1am.xyz/tx/917c72d11d4a0b29caf5eb57635cf47b9c347ff37154532cce4a22dae8125804?network=preview), block 98115 |
+| LOT-261113-001 committed, then proven 31 of 32 inside, accepted | [ba56d422…068996fb](https://explorer.1am.xyz/tx/ba56d4228018c5d01626a47ea95d58549ddcf3a728291153860a171e068996fb?network=preview), block 98124; [040c279b…a2b4865b](https://explorer.1am.xyz/tx/040c279b3a1bd9001869e3ea74b9b66104c445b889f133f7c1f472fda2b4865b?network=preview), block 98130 |
+| Customer requests an audit of LOT-261113-001 | [66692415…a7a43107](https://explorer.1am.xyz/tx/6669241561c3d3b10aa3108022a321f58e3f831dd991c2d0dc035714a7a43107?network=preview), block 98159 |
+| Supplier answers from the same commitment: 17 of 32 inside the audit band | [40a0aa77…aec9ac3b](https://explorer.1am.xyz/tx/40a0aa77c9780cf03809a27a013258fd7f44d81af56120d19d9a758baec9ac3b?network=preview), block 98167 |
+| LOT-261113-002 committed, then proven 30 of 32 inside, rejected | [e3854993…57a1688b](https://explorer.1am.xyz/tx/e3854993998160700389ecc8bc8db3d3f4a4088e3dab0b252a214e7057a1688b?network=preview), block 98136; [3aed6138…3be8a22e](https://explorer.1am.xyz/tx/3aed613850d78d7c7b2ede6bc55e67ff22b09a9ab6a14ef616c9eb883be8a22e?network=preview), block 98142 |
+| Part #9 of LOT-261113-002 disclosed, 11.935 mm | [a8cda66f…9a02f41e](https://explorer.1am.xyz/tx/a8cda66fb1a78c0c290fce26ad4418d54500e06fd9b1f42cdd68d66b9a02f41e?network=preview), block 98154 |
+| LOT-261113-003 committed, then the tampered proof refused (no transaction) | [6920f019…67b03fb5](https://explorer.1am.xyz/tx/6920f0193057369dea18f894fd6918369af52560ff173794643fb03967b03fb5?network=preview), block 98148 |
 
-Lot labels appear here and in the demo because the demo plays both parties. On the ledger the lots are keyed hashes, for example `96753159…a155d690` for LOT-261113-002.
+The end-to-end suite also ran on Preview against its own contract on 13 Nov 2026: 5 of 5 passed, 12 transactions, including a rejected lot, a disclosure and an audit.
+
+Lot labels appear here and in the demo because the demo plays both parties. On the ledger the lots are keyed hashes.
 
 ## Trust model and limits
 

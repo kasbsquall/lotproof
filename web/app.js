@@ -128,7 +128,9 @@ async function loadState({ select = null, adoptNew = null } = {}) {
     if (select) S.sel = select;
     if (!S.sel || !st.lots.some((l) => l.id === S.sel)) {
       const fromHash = new URLSearchParams(location.hash.slice(1)).get('lot');
-      S.sel = st.lots.find((l) => l.label === fromHash)?.id ?? st.lots[0]?.id ?? null;
+      S.sel = st.lots.find((l) => l.label === fromHash)?.id
+        ?? st.lots.find((l) => l.status === 'accepted' || l.status === 'rejected')?.id
+        ?? st.lots[0]?.id ?? null;
     }
     renderAll();
     return st;
@@ -157,7 +159,7 @@ function showNotice(kind, msg = '') {
   const html = {
     wait: `<i class="ph-light ph-hourglass-medium spin"></i><h2>The Midnight service is starting</h2><p>It is connecting to the network and reading the contract. This page retries every ${STARTING_RETRY_MS / 1000} s.</p>`,
     error: `<i class="ph-light ph-wifi-slash"></i><h2>Cannot reach the Lotproof service</h2><p>${esc(msg)} Check that the service is running on this address, then retry.</p><div class="row"><button class="btn" type="button" id="retryBtn"><i class="ph-light ph-arrow-clockwise"></i>Retry</button></div>`,
-    empty: `<i class="ph-light ph-ruler"></i><h2>No lots on the contract yet</h2><p>Measure a lot: the demo station measures 32 parts, commits their hash on ${esc(netName(S.state?.network))}, and the supplier proves how many are inside the band. Each transaction takes about 20 s.</p><div class="row"><button class="btn primary" type="button" id="emptyMeasure" ${busy ? 'disabled' : ''}><i class="ph-light ph-ruler"></i>Measure a new lot</button></div>`,
+    empty: `<i class="ph-light ph-ruler"></i><h2>No lots on the contract yet</h2><p>Measure a lot: the demo station measures 32 parts, commits their hash on ${esc(netName(S.state?.network))}, and the supplier proves how many are inside the band. Each transaction takes about 35 s.</p><div class="row"><button class="btn primary" type="button" id="emptyMeasure" ${busy ? 'disabled' : ''}><i class="ph-light ph-ruler"></i>Measure a new lot</button></div>`,
   }[kind];
   n.className = `notice ${kind === 'error' ? 'err' : kind}`;
   n.innerHTML = html;
@@ -256,7 +258,19 @@ function renderAll() {
   renderLot(lot);
 }
 
+function auditHTML(l) {
+  const a = l.audit, ab = S.state.auditSpec;
+  if (!a || !ab) return '';
+  return a.answered
+    ? ` <span class="audit">Customer audit, band ${mm(ab.lowerUm)} to ${mm(ab.upperUm)} mm: <strong>${a.inTolerance} of ${l.sampleSize}</strong> inside, proven later from the same commitment.</span>`
+    : ' <span class="audit">Customer audit requested, answer pending.</span>';
+}
+
 function summaryHTML(l, sp) {
+  return summaryCore(l, sp) + auditHTML(l);
+}
+
+function summaryCore(l, sp) {
   const lim = `the customer's limit of ${plural(sp.maxDefects, 'defect', 'defects')}`;
   if (l.status === 'accepted') return `<strong>${l.inTolerance} of ${l.sampleSize} parts</strong> inside ${tolText(sp)}. <strong class="in">Accepted</strong> under ${lim}.`;
   if (l.status === 'rejected') return `<strong>${l.inTolerance} of ${l.sampleSize} parts</strong> inside ${tolText(sp)}. <strong class="out">Rejected</strong>: ${plural(outOf(l), 'part', 'parts')} out, over ${lim}.`;
@@ -489,6 +503,13 @@ function renderTrail(l, sp) {
     const who = one ? `disclosePart, #${one.index + 1} at ${mm(one.valueUm)} mm, ${inBand(sp, one.valueUm) ? 'inside' : 'outside'} the band` : 'disclosePart, value shown on the chart';
     row('ph-eye', one ? `Part #${one.index + 1} disclosed` : 'Part disclosed', who, esc(fmtTime(d.at)), d.blockHeight ?? '–', hashCell(d.txHash), ok('Matches commitment'));
   });
+  const ab = S.state.auditSpec;
+  for (const r of txOf(l, 'requestAudit')) {
+    row('ph-magnifying-glass', 'Customer audit request', `requestAudit, band ${ab ? `${mm(ab.lowerUm)} to ${mm(ab.upperUm)} mm` : 'of the audit spec'}`, esc(fmtTime(r.at)), r.blockHeight ?? '–', hashCell(r.txHash), ok('On-chain'));
+  }
+  for (const a of txOf(l, 'answerAudit')) {
+    row('ph-seal-check', 'Supplier audit answer', l.audit?.answered ? `answerAudit, ${l.audit.inTolerance} of ${l.sampleSize} inside, from the same commitment` : 'answerAudit', esc(fmtTime(a.at)), a.blockHeight ?? '–', hashCell(a.txHash), ok('Verified'));
+  }
   if (!rows.length) row('ph-hourglass-medium st-pend', 'Station commitment', 'commitLot', '<span class="dim">waiting</span>', '–', '–', '<span class="chip st-pend">Pending</span>');
   $('#tbody').innerHTML = rows.join('');
 }
@@ -498,7 +519,7 @@ function renderContract() {
   const setup = (setupTxs || []).map((t) => `<span>${esc(t.step)}</span><span class="num">${t.blockHeight ? `block ${t.blockHeight}` : 'block not reported'}</span><span class="num">${esc(fmtTime(t.at))}</span>${hashCell(t.txHash)}`).join('');
   $('#contract').innerHTML = `<span class="it"><i class="ph-light ph-file-code"></i>Contract ${hashText(a, 'contract')}<button class="copy" type="button" aria-label="Copy contract address" data-copy="${esc(a)}"><i class="ph-light ph-copy"></i></button></span>`
     + `<span class="it"><i class="ph-light ph-globe-simple"></i>${esc(netName(network))}${network === 'local' ? ', no public explorer' : explorer() ? `, verify in ${esc(explorer().name)}` : ''}</span>`
-    + `<span class="it num"><i class="ph-light ph-seal-check"></i>${plural(S.state.provenLots, 'lot', 'lots')} proven on this contract${S.state.committedLots > S.state.provenLots ? `, ${S.state.committedLots - S.state.provenLots} committed and not proven` : ''}</span>`
+    + `<span class="it num"><i class="ph-light ph-seal-check"></i>${plural(S.state.provenLots, 'lot', 'lots')} proven on this contract${S.state.committedLots > S.state.provenLots ? `, ${S.state.committedLots - S.state.provenLots} committed and not proven (public, so a measured lot cannot be hidden)` : ''}${S.state.requestedAudits ? `, ${plural(S.state.answeredAudits, 'audit', 'audits')} answered of ${S.state.requestedAudits} requested` : ''}</span>`
     + (setup ? `<details><summary><i class="ph-light ph-caret-right car"></i>Contract setup, ${plural(setupTxs.length, 'transaction', 'transactions')}</summary><div class="setup">${setup}</div></details>` : '');
 }
 
@@ -517,7 +538,8 @@ document.addEventListener('click', async (e) => {
 });
 
 // Re-reads the lot from the contract state on the indexer (the service queries
-// it on every /api/state call), then points to the transactions.
+// it on every /api/state call), then points to the transactions, which open in
+// a public explorer that does not depend on this demo.
 $('#verifyBtn').onclick = async () => {
   play('click');
   const b = $('#verifyBtn');
@@ -532,7 +554,7 @@ $('#verifyBtn').onclick = async () => {
       : proven(lot) ? `${lot.inTolerance} of ${lot.sampleSize} inside, ${lot.status}${proof ? `, proof at block ${proof.blockHeight}` : ''}`
       : lot.status === 'refused' ? 'no count recorded, the proof was refused' : 'no count recorded yet';
     renderAll();
-    toast(`Read from contract ${short(st.contractAddress)} on ${netName(st.network)} at ${at}: ${what}.`, { icon: 'ph-seal-check', ms: 6000 });
+    toast(`Read from contract ${short(st.contractAddress)} on ${netName(st.network)} at ${at}: ${what}. Open any transaction below in ${explorer()?.name ?? 'an explorer'} to check it without this demo.`, { icon: 'ph-seal-check', ms: 8000 });
   } catch {
     toast('Could not reach the contract state. Try again in a moment.', { icon: 'ph-warning' });
   } finally {
@@ -552,6 +574,7 @@ const FLOWS = {
   measure: [['queued', 'Queued', 'ph-queue'], ['measuring', 'Station measures 32 parts', 'ph-ruler'], ['committing', 'Station commits', 'ph-fingerprint'], ['proving', 'Supplier proves', 'ph-seal-check'], ['done', 'Contract verdict', 'ph-gavel']],
   tamper: [['queued', 'Queued', 'ph-queue'], ['measuring', 'Station measures', 'ph-ruler'], ['committing', 'Station commits', 'ph-fingerprint'], ['tampering', 'Numbers changed', 'ph-pencil-slash'], ['proving', 'Proof attempt', 'ph-seal-check'], ['done', 'Contract verdict', 'ph-gavel']],
   disclose: [['queued', 'Queued', 'ph-queue'], ['proving', 'Disclosure transaction', 'ph-eye'], ['done', 'Recorded', 'ph-check']],
+  audit: [['queued', 'Queued', 'ph-queue'], ['requesting', 'Customer asks', 'ph-magnifying-glass'], ['answering', 'Supplier proves the answer', 'ph-seal-check'], ['done', 'Audit recorded', 'ph-check']],
 };
 const isBusy = () => !!S.job && !S.job.end;
 
@@ -563,6 +586,9 @@ function setButtons() {
   }
   $('#defects').disabled = !ready || busy;
   $('#verifyBtn').disabled = !lot;
+  const auditable = lot && lot.status !== 'refused' && lot.status !== 'measuring' && !lot.audit && !!S.state?.auditSpec;
+  $('#auditBtn').disabled = !ready || busy || !auditable;
+  $('#auditBtn').title = !lot ? '' : lot.audit ? 'This lot was already audited' : lot.status === 'refused' ? 'A refused lot has no valid commitment to audit' : 'As the customer, ask how many parts of this lot fit a tighter band. The supplier answers from the same commitment.';
   $('#consoleBtn').disabled = !lot;
   $('#consoleBtn2').disabled = !lot;
   const em = $('#emptyMeasure');
@@ -575,6 +601,10 @@ function startMeasure() {
 }
 $('#measureBtn').onclick = startMeasure;
 $('#tamperBtn').onclick = () => startJob('tamper', '/api/demo/tamper', {});
+$('#auditBtn').onclick = () => {
+  const l = currentLot();
+  if (l) startJob('audit', `/api/lots/${l.id}/audit`, {}, { lotId: l.id, label: l.label });
+};
 
 async function startJob(kind, path, body, extra = {}) {
   if (isBusy() || !S.state) return;
@@ -611,7 +641,7 @@ async function poll() {
       j.marks[s.step] = Date.now();
       j.step = s.step;
       // Select the new lot as soon as the service creates it, so the previous verdict is not left on screen.
-      if (j.kind !== 'disclose' && s.step !== 'queued') loadState({ adoptNew: j.prevIds });
+      if (j.kind !== 'disclose' && j.kind !== 'audit' && s.step !== 'queued') loadState({ adoptNew: j.prevIds });
     }
     if (s.status === 'done') return finishJob(s.result);
     if (s.status === 'failed') {
@@ -636,13 +666,13 @@ async function finishJob(result) {
   j.end = Date.now();
   j.marks.done = j.marks.done ?? j.end;
   j.step = 'done';
-  const lotId = j.kind === 'disclose' ? j.lotId : result?.id;
+  const lotId = j.kind === 'disclose' || j.kind === 'audit' ? j.lotId : result?.id;
   await loadState({ select: lotId });
   j.lot = S.state?.lots.find((l) => l.id === lotId) ?? null;
   setButtons();
   renderRun();
   const l = j.lot;
-  if (j.kind === 'disclose') play('disclosed');
+  if (j.kind === 'disclose' || j.kind === 'audit') play('disclosed');
   else if (l?.status === 'accepted') play('accepted');
   else play('rejected');
 }
@@ -668,7 +698,12 @@ function renderRun() {
     title = j.limit ? 'The demo cannot take another run right now' : 'The run failed';
     msg = `<code>${esc(j.error)}</code>`;
   } else if (j.end && lot) {
-    if (j.kind === 'disclose') {
+    if (j.kind === 'audit') {
+      const a = lot.audit, ab = S.state.auditSpec;
+      tone = 'good';
+      title = a?.answered ? `${esc(lot.label)}: ${a.inTolerance} of ${lot.sampleSize} inside the audit band${ab ? ` ${mm(ab.lowerUm)} to ${mm(ab.upperUm)} mm` : ''}` : `Audit of ${esc(lot.label)} recorded`;
+      msg = 'Answered from the same station commitment, after the fact. No new measurement and no values revealed.';
+    } else if (j.kind === 'disclose') {
       const d = (lot.disclosed || []).find((x) => x.index === j.index);
       tone = 'good';
       title = d ? `Part #${j.index + 1} disclosed: ${mm(d.valueUm)} mm, ${signUm(d.valueUm - S.state.spec.nominalUm)} µm from nominal` : `Disclosure of ${lbl} recorded`;
@@ -685,9 +720,11 @@ function renderRun() {
   } else {
     title = j.kind === 'measure' ? `Measuring a new lot, ${plural(j.defects, 'part', 'parts')} planted out of band`
       : j.kind === 'tamper' ? 'Changing the numbers after the station committed them'
+      : j.kind === 'audit' ? `Customer audit of ${esc(j.label)} against a tighter band`
       : `Disclosing ${lbl}`;
-    msg = j.kind === 'measure' ? 'Demo: the service plays the measuring station and the supplier. Each transaction takes about 20 s.'
+    msg = j.kind === 'measure' ? 'Demo: the service plays the measuring station and the supplier. Each transaction takes about 35 s.'
       : j.kind === 'tamper' ? 'Demo: the station commits real readings, then better numbers are swapped in before the supplier proves.'
+      : j.kind === 'audit' ? 'The customer publishes a new question on-chain. The supplier proves the answer from the commitment made at measuring time: no new measurement, no values revealed.'
       : 'The supplier opens one measurement against the station commitment.';
     if (j.netErr) msg += ` <code>${esc(j.netErr)}</code> Retrying.`;
   }

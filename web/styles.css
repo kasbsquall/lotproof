@@ -113,6 +113,7 @@ h1{margin:6px 0 0;font-size:30px;line-height:1.1;font-weight:650;letter-spacing:
 .summary{margin:26px 0 0;font-size:22px;line-height:1.4;font-weight:400;letter-spacing:-.01em;max-width:62ch;text-wrap:pretty}
 .summary strong{font-weight:600}
 .summary .in{color:var(--dentro-osc)} .summary .out{color:oklch(48% .18 28)} .summary .pnd{color:var(--pend-osc)}
+.summary .audit{display:block;margin-top:10px;font-size:16px;line-height:1.45;color:var(--tinta-2)} .summary .audit strong{color:var(--tinta)}
 .since{margin-top:10px;font-size:13px;color:var(--tinta-3);max-width:90ch}
 
 /* facts strip: unequal columns */

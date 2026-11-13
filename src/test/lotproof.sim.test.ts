@@ -24,15 +24,15 @@ describe('Lotproof contract (simulator)', () => {
 
   beforeEach(async () => {
     sim = await LotproofSimulator.create();
-    await sim.registerStation(sim.stationKey());
     await sim.publishSpec(SPEC_ID, SHAFT);
+    await sim.registerStation(sim.stationKey(), SPEC_ID);
   });
 
   describe('happy path', () => {
     it('accepts a lot with every part inside the band and publishes only the count', async () => {
       const lot = idFrom('LOT-2026-1109-A');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       const l = await sim.proveLot(lot);
       const rec = l.lots.lookup(lot);
       expect(rec.status).toBe(LotStatus.Accepted);
@@ -48,7 +48,7 @@ describe('Lotproof contract (simulator)', () => {
       const [a, b] = [idFrom('LOT-P1'), idFrom('LOT-P2')];
       for (const id of [a, b]) {
         sim.measure(id, { values: goodValues(), salt: bytes32() });
-        await sim.commitLot(id, SPEC_ID);
+        await sim.commitLot(id);
       }
       const l = await sim.proveLot(a);
       expect(l.committedLots).toBe(2n);
@@ -59,7 +59,7 @@ describe('Lotproof contract (simulator)', () => {
     it('accepts a lot at exactly the acceptance number (31 of 32)', async () => {
       const lot = idFrom('LOT-B');
       sim.measure(lot, { values: withOutliers(1), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       const rec = (await sim.proveLot(lot)).lots.lookup(lot);
       expect(rec.inTolerance).toBe(31n);
       expect(rec.status).toBe(LotStatus.Accepted);
@@ -68,7 +68,7 @@ describe('Lotproof contract (simulator)', () => {
     it('rejects a lot above the acceptance number (30 of 32) and says so on chain', async () => {
       const lot = idFrom('LOT-C');
       sim.measure(lot, { values: withOutliers(2), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       const rec = (await sim.proveLot(lot)).lots.lookup(lot);
       expect(rec.inTolerance).toBe(30n);
       expect(rec.status).toBe(LotStatus.Rejected);
@@ -80,7 +80,7 @@ describe('Lotproof contract (simulator)', () => {
       v[0] = SHAFT.lower;
       v[1] = SHAFT.upper;
       sim.measure(lot, { values: v, salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       expect((await sim.proveLot(lot)).lots.lookup(lot).inTolerance).toBe(32n);
     });
 
@@ -89,7 +89,7 @@ describe('Lotproof contract (simulator)', () => {
       const values = goodValues();
       const salt = bytes32();
       sim.measure(lot, { values, salt });
-      const rec = (await sim.commitLot(lot, SPEC_ID)).lots.lookup(lot);
+      const rec = (await sim.commitLot(lot)).lots.lookup(lot);
       expect(rec.status).toBe(LotStatus.Committed);
       expect(rec.commitment).toEqual(pureCircuits.lotCommitment(lot, SPEC_ID, values, salt));
       expect(rec.station).toEqual(sim.stationKey());
@@ -99,7 +99,7 @@ describe('Lotproof contract (simulator)', () => {
       const lot = idFrom('LOT-E');
       const values = goodValues();
       sim.measure(lot, { values, salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       await sim.proveLot(lot);
       const l = await sim.disclosePart(lot, 7n);
       const parts = l.disclosed.lookup(lot);
@@ -113,7 +113,7 @@ describe('Lotproof contract (simulator)', () => {
       const lot = idFrom('LOT-TAMPER');
       const salt = bytes32();
       sim.measure(lot, { values: withOutliers(3), salt });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       // The supplier swaps in "better" numbers before proving.
       sim.measure(lot, { values: goodValues(), salt });
       await expect(sim.proveLot(lot)).rejects.toThrow(/do not match the station commitment/);
@@ -123,7 +123,8 @@ describe('Lotproof contract (simulator)', () => {
       const lot = idFrom('LOT-LIE');
       const salt = bytes32();
       sim.measure(lot, { values: withOutliers(1), salt });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
+      await sim.proveLot(lot);
       sim.measure(lot, { values: goodValues(), salt });
       await expect(sim.disclosePart(lot, 0n)).rejects.toThrow(/do not match the station commitment/);
     });
@@ -132,13 +133,13 @@ describe('Lotproof contract (simulator)', () => {
       const lot = idFrom('LOT-ROGUE');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
       sim.impersonate({ stationSecret: bytes32() });
-      await expect(sim.commitLot(lot, SPEC_ID)).rejects.toThrow(/Station not registered/);
+      await expect(sim.commitLot(lot)).rejects.toThrow(/Station not registered/);
     });
 
     it('rejects proving by anyone other than the supplier admin', async () => {
       const lot = idFrom('LOT-OUTSIDER');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       sim.impersonate({ adminSecret: bytes32() });
       await expect(sim.proveLot(lot)).rejects.toThrow(/Only the supplier admin/);
     });
@@ -146,61 +147,76 @@ describe('Lotproof contract (simulator)', () => {
     it('lets only the customer approve stations and publish specs, not the supplier', async () => {
       // The supplier keeps its admin secret but does not hold the customer's.
       sim.impersonate({ customerSecret: bytes32() });
-      await expect(sim.registerStation(bytes32())).rejects.toThrow(/Only the customer/);
+      await expect(sim.registerStation(bytes32(), SPEC_ID)).rejects.toThrow(/Only the customer/);
       await expect(sim.revokeStation(sim.stationKey())).rejects.toThrow(/Only the customer/);
       await expect(sim.publishSpec(idFrom('X'), SHAFT)).rejects.toThrow(/Only the customer/);
     });
 
     it('rejects approving the same station twice and revoking an unknown one', async () => {
-      await expect(sim.registerStation(sim.stationKey())).rejects.toThrow(/already approved/);
+      await expect(sim.registerStation(sim.stationKey(), SPEC_ID)).rejects.toThrow(/already approved/);
+      await expect(sim.registerStation(bytes32(), idFrom('NO-SUCH-SPEC'))).rejects.toThrow(/Unknown spec/);
       await expect(sim.revokeStation(bytes32())).rejects.toThrow(/Station not registered/);
     });
 
     it('refuses new lots from a revoked station but keeps the lots it already committed', async () => {
       const before = idFrom('LOT-BEFORE');
       sim.measure(before, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(before, SPEC_ID);
+      await sim.commitLot(before);
       const l = await sim.revokeStation(sim.stationKey());
       expect(l.stations.member(sim.stationKey())).toBe(false);
       const after = idFrom('LOT-AFTER');
       sim.measure(after, { values: goodValues(), salt: bytes32() });
-      await expect(sim.commitLot(after, SPEC_ID)).rejects.toThrow(/Station not registered/);
+      await expect(sim.commitLot(after)).rejects.toThrow(/Station not registered/);
       expect((await sim.proveLot(before)).lots.lookup(before).status).toBe(LotStatus.Accepted);
     });
 
-    it("refuses to reuse one lot's measurements and salt to prove another lot", async () => {
+    it('binds each on-chain commitment to its lot: same values and salt give different commitments', async () => {
       const a = idFrom('LOT-A');
       const b = idFrom('LOT-B2');
+      const values = goodValues();
       const salt = bytes32();
-      sim.measure(a, { values: withOutliers(3), salt });
-      sim.measure(b, { values: goodValues(), salt });
-      await sim.commitLot(a, SPEC_ID);
-      await sim.commitLot(b, SPEC_ID);
-      // The supplier tries to prove the bad lot with the good lot's numbers and salt.
-      sim.measure(a, { values: goodValues(), salt });
-      await expect(sim.proveLot(a)).rejects.toThrow(/do not match the station commitment/);
+      sim.measure(a, { values, salt });
+      sim.measure(b, { values, salt });
+      await sim.commitLot(a);
+      const l = await sim.commitLot(b);
+      expect(l.lots.lookup(a).commitment).not.toEqual(l.lots.lookup(b).commitment);
+    });
+
+    it('commits a lot under the spec the customer approved the station for', async () => {
+      const wide = idFrom('DRW-WIDE');
+      await sim.publishSpec(wide, { ...SHAFT, lower: 11_000n, upper: 13_000n });
+      const lot = idFrom('LOT-SPEC');
+      sim.measure(lot, { values: withOutliers(3), salt: bytes32() });
+      const rec = (await sim.commitLot(lot)).lots.lookup(lot);
+      expect(rec.specId).toEqual(SPEC_ID);
+      // Proven against the tight band, not the wide one: 3 out, rejected.
+      expect((await sim.proveLot(lot)).lots.lookup(lot).status).toBe(LotStatus.Rejected);
     });
 
     it('rejects committing the same lot twice', async () => {
       const lot = idFrom('LOT-TWICE');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
-      await expect(sim.commitLot(lot, SPEC_ID)).rejects.toThrow(/already committed/);
+      await sim.commitLot(lot);
+      await expect(sim.commitLot(lot)).rejects.toThrow(/already committed/);
     });
 
     it('rejects proving a lot twice', async () => {
       const lot = idFrom('LOT-REPROVE');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       await sim.proveLot(lot);
       await expect(sim.proveLot(lot)).rejects.toThrow(/already proven/);
     });
 
-    it('rejects a lot against an unknown spec and an unknown lot', async () => {
-      const lot = idFrom('LOT-NOSPEC');
-      sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await expect(sim.commitLot(lot, idFrom('NOPE'))).rejects.toThrow(/Unknown spec/);
+    it('rejects proving an unknown lot', async () => {
       await expect(sim.proveLot(idFrom('GHOST'))).rejects.toThrow(/Unknown lot/);
+    });
+
+    it('refuses to disclose a part of a lot that is not proven yet', async () => {
+      const lot = idFrom('LOT-EARLY');
+      sim.measure(lot, { values: goodValues(), salt: bytes32() });
+      await sim.commitLot(lot);
+      await expect(sim.disclosePart(lot, 0n)).rejects.toThrow(/not proven yet/);
     });
 
     it('rejects specs that are malformed or reuse an id', async () => {
@@ -216,7 +232,7 @@ describe('Lotproof contract (simulator)', () => {
     it('rejects disclosure by anyone other than the supplier, of an unknown lot, or of the same part twice', async () => {
       const lot = idFrom('LOT-DISPUTE');
       sim.measure(lot, { values: withOutliers(1), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       await sim.proveLot(lot);
       await expect(sim.disclosePart(idFrom('GHOST'), 0n)).rejects.toThrow(/Unknown lot/);
       await sim.disclosePart(lot, 0n);
@@ -231,8 +247,88 @@ describe('Lotproof contract (simulator)', () => {
     it('rejects an out-of-range part index', async () => {
       const lot = idFrom('LOT-IDX');
       sim.measure(lot, { values: goodValues(), salt: bytes32() });
-      await sim.commitLot(lot, SPEC_ID);
+      await sim.commitLot(lot);
       await expect(sim.disclosePart(lot, 32n)).rejects.toThrow(/out of range/);
+    });
+  });
+
+  describe('audits asked after the fact', () => {
+    // Tighter band published by the customer later: 12.000 +/- 0.020 mm.
+    const AUDIT_ID = idFrom('AUDIT-2026-Q4');
+    const TIGHT: Spec = { nominal: 12_000n, lower: 11_980n, upper: 12_020n, maxDefects: 0n };
+
+    it('answers a customer audit against a new band from the same commitment, without new measurements', async () => {
+      const lot = idFrom('LOT-AUDIT');
+      const values = goodValues();
+      sim.measure(lot, { values, salt: bytes32() });
+      await sim.commitLot(lot);
+      await sim.proveLot(lot);
+      await sim.publishSpec(AUDIT_ID, TIGHT);
+      let l = await sim.requestAudit(lot, AUDIT_ID);
+      const key = pureCircuits.auditKey(lot, AUDIT_ID);
+      expect(l.audits.lookup(key).answered).toBe(false);
+      expect(l.requestedAudits - l.answeredAudits).toBe(1n);
+      l = await sim.answerAudit(lot, AUDIT_ID);
+      const expected = BigInt(values.filter((v) => v >= TIGHT.lower && v <= TIGHT.upper).length);
+      expect(l.audits.lookup(key)).toMatchObject({ answered: true, inTolerance: expected });
+      expect(l.requestedAudits - l.answeredAudits).toBe(0n);
+      expect(l.lots.lookup(lot).inTolerance).toBe(32n);
+      expect(l.disclosed.member(lot)).toBe(false);
+    });
+
+    it('lets only the customer request and only the supplier answer, once', async () => {
+      const lot = idFrom('LOT-AUDIT-2');
+      sim.measure(lot, { values: goodValues(), salt: bytes32() });
+      await sim.commitLot(lot);
+      await sim.publishSpec(AUDIT_ID, TIGHT);
+      await expect(sim.answerAudit(lot, AUDIT_ID)).rejects.toThrow(/No audit requested/);
+      const customer = sim.privateState.customerSecret;
+      sim.impersonate({ customerSecret: bytes32() });
+      await expect(sim.requestAudit(lot, AUDIT_ID)).rejects.toThrow(/Only the customer/);
+      sim.impersonate({ customerSecret: customer });
+      await sim.requestAudit(lot, AUDIT_ID);
+      await expect(sim.requestAudit(lot, AUDIT_ID)).rejects.toThrow(/already requested/);
+      const admin = sim.privateState.adminSecret;
+      sim.impersonate({ adminSecret: bytes32() });
+      await expect(sim.answerAudit(lot, AUDIT_ID)).rejects.toThrow(/Only the supplier admin/);
+      sim.impersonate({ adminSecret: admin });
+      await sim.answerAudit(lot, AUDIT_ID);
+      await expect(sim.answerAudit(lot, AUDIT_ID)).rejects.toThrow(/already answered/);
+    });
+
+    it('refuses an audit answer from changed measurements, and audits of unknown lots or specs', async () => {
+      const lot = idFrom('LOT-AUDIT-3');
+      const salt = bytes32();
+      sim.measure(lot, { values: withOutliers(2), salt });
+      await sim.commitLot(lot);
+      await sim.publishSpec(AUDIT_ID, TIGHT);
+      await expect(sim.requestAudit(idFrom('GHOST'), AUDIT_ID)).rejects.toThrow(/Unknown lot/);
+      await expect(sim.requestAudit(lot, idFrom('NO-SPEC'))).rejects.toThrow(/Unknown spec/);
+      await sim.requestAudit(lot, AUDIT_ID);
+      sim.measure(lot, { values: goodValues(), salt });
+      await expect(sim.answerAudit(lot, AUDIT_ID)).rejects.toThrow(/do not match the station commitment/);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles a zero acceptance number and a zero-width band', async () => {
+      const zero = idFrom('DRW-ZERO');
+      await sim.publishSpec(zero, { nominal: 12_000n, lower: 12_000n, upper: 12_000n, maxDefects: 0n });
+      const lot = idFrom('LOT-ZERO');
+      const v = goodValues();
+      v[0] = 12_000n;
+      sim.measure(lot, { values: v, salt: bytes32() });
+      await sim.commitLot(lot);
+      await sim.proveLot(lot);
+      await sim.requestAudit(lot, zero);
+      const l = await sim.answerAudit(lot, zero);
+      expect(l.audits.lookup(pureCircuits.auditKey(lot, zero)).inTolerance).toBe(
+        BigInt(v.filter((x) => x === 12_000n).length),
+      );
+    });
+
+    it('rejects a spec whose nominal sits below the band', async () => {
+      await expect(sim.publishSpec(idFrom('BAD-LOW'), { ...SHAFT, nominal: 11_900n })).rejects.toThrow(/inside the band/);
     });
   });
 

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/light/style.css">
-<link rel="stylesheet" href="styles.css?v=lp13">
+<link rel="stylesheet" href="styles.css?v=lp14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='7' width='20' height='8' rx='2' fill='%23c9ecea'/%3E%3Cline x1='1' y1='7' x2='21' y2='7' stroke='%23157f80' stroke-width='1.4'/%3E%3Cline x1='1' y1='15' x2='21' y2='15' stroke='%23157f80' stroke-width='1.4'/%3E%3Ccircle cx='6' cy='11' r='1.7' fill='%23106566'/%3E%3Ccircle cx='11' cy='11' r='1.7' fill='%23106566'/%3E%3Ccircle cx='16' cy='11' r='1.7' fill='%23106566'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -63,8 +63,9 @@
               </select>
             </label>
           </div>
-          <button class="btn danger" id="tamperBtn" type="button" disabled><i class="ph-light ph-pencil-slash"></i>Try to change the numbers</button>
-          <button class="btn primary" id="verifyBtn" type="button" disabled><i class="ph-light ph-seal-check"></i>Verify on Midnight</button>
+          <button class="btn danger" id="tamperBtn" type="button" disabled title="The demo commits real readings, then swaps in better numbers before the proof"><i class="ph-light ph-pencil-slash"></i>Simulate tampering</button>
+          <button class="btn" id="auditBtn" type="button" disabled title="As the customer, ask how many parts of this lot fit a tighter band. The supplier answers from the same commitment."><i class="ph-light ph-magnifying-glass"></i>Audit with a tighter band</button>
+          <button class="btn primary" id="verifyBtn" type="button" disabled><i class="ph-light ph-seal-check"></i>Check on Midnight</button>
         </div>
       </div>
 
@@ -145,6 +146,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"><i class="ph-light ph-info"></i><span id="toastTxt"></span><button id="toastBtn" type="button" hidden>Retry</button></div>
 
-<script type="module" src="app.js?v=lp13"></script>
+<script type="module" src="app.js?v=lp14"></script>
 </body>
 </html>

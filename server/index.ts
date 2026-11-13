@@ -18,9 +18,10 @@ const JOBS_PER_IP_PER_HOUR = Number(process.env['JOBS_PER_IP_PER_HOUR'] ?? 6);
 const JOBS_PER_HOUR = Number(process.env['JOBS_PER_HOUR'] ?? 30);
 const HOUR_MS = 3_600_000;
 const JOB_TTL_MS = HOUR_MS;
-const ALLOWED_ORIGIN = process.env['ALLOWED_ORIGIN'] ?? '*';
+// Unset by default: the web view is served from the same origin and needs no CORS.
+const ALLOWED_ORIGIN = process.env['ALLOWED_ORIGIN'];
 
-type JobKind = 'measure' | 'tamper' | 'disclose';
+type JobKind = 'measure' | 'tamper' | 'disclose' | 'audit';
 type Job = {
   id: string;
   kind: JobKind;
@@ -89,9 +90,13 @@ setInterval(prune, 10 * 60_000).unref();
 function send(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, {
     'content-type': 'application/json',
-    'access-control-allow-origin': ALLOWED_ORIGIN,
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    ...(ALLOWED_ORIGIN
+      ? {
+          'access-control-allow-origin': ALLOWED_ORIGIN,
+          'access-control-allow-methods': 'GET, POST, OPTIONS',
+          'access-control-allow-headers': 'content-type',
+        }
+      : {}),
     'cache-control': 'no-store',
   });
   res.end(JSON.stringify(body));
@@ -182,10 +187,16 @@ const server = createServer(async (req, res) => {
       const body = await readJson(req);
       const index = Number(body['index']);
       if (!Number.isInteger(index) || index < 0 || index > 31) return send(res, 400, { error: 'index must be 0 to 31' });
+      if (!chain.canDisclose(discloseMatch[1])) return send(res, 409, { error: 'Only a proven lot can have a part disclosed' });
       return enqueue(res, ip, 'disclose', (j) => {
         j.step = 'proving';
         return chain.disclose(discloseMatch[1], index);
       });
+    }
+    const auditMatch = url.pathname.match(/^\/api\/lots\/([0-9a-f]{64})\/audit$/);
+    if (req.method === 'POST' && auditMatch) {
+      if (!chain.canAudit(auditMatch[1])) return send(res, 409, { error: 'This lot cannot be audited, or was audited already' });
+      return enqueue(res, ip, 'audit', (j) => chain.audit(auditMatch[1], (s) => (j.step = s)));
     }
     const supplierMatch = url.pathname.match(/^\/api\/supplier\/lots\/([0-9a-f]{64})$/);
     if (req.method === 'GET' && supplierMatch) {
